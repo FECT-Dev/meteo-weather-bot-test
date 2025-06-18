@@ -1,0 +1,58 @@
+name: Daily Weather PDF Download
+
+on:
+  schedule:
+    - cron: '0 3 * * *'  # Runs daily at 03:00 UTC
+  workflow_dispatch:
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository without token
+        uses: actions/checkout@v3
+        with:
+          persist-credentials: false  # ⛔ disables default bot token
+
+      - name: Set remote to use Personal Access Token
+        env:
+          TOKEN: ${{ secrets.ACTIONS_PAT }}
+        run: |
+          git remote set-url origin https://${TOKEN}@github.com/${{ github.repository }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download and extract Chrome & ChromeDriver
+        run: |
+          wget https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/126.0.6478.126/linux64/chrome-linux64.zip
+          wget https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/126.0.6478.126/linux64/chromedriver-linux64.zip
+          unzip chrome-linux64.zip
+          unzip chromedriver-linux64.zip
+          chmod +x chrome-linux64/chrome chromedriver-linux64/chromedriver
+
+      - name: Run the download script
+        run: python download_weather_pdf.py
+
+      - name: Move and rename the PDF
+        run: |
+          TODAY=$(date +%Y-%m-%d)
+          mkdir -p reports/$TODAY
+          mv downloads/$TODAY/*.pdf reports/$TODAY/weather-$TODAY.pdf
+
+      - name: Commit and push to repo using PAT
+        env:
+          TOKEN: ${{ secrets.ACTIONS_PAT }}
+        run: |
+          git config --global user.name "Auto Commit Bot"
+          git config --global user.email "actions@github.com"
+          git pull origin main
+          git add reports/
+          git commit -m "Add weather report for $(date +%Y-%m-%d)" || echo "No changes to commit"
+          git push origin main
