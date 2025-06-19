@@ -3,7 +3,7 @@ name: Daily Weather PDF Download
 on:
   schedule:
     - cron: '0 3 * * *'  # Runs daily at 03:00 UTC
-  workflow_dispatch:
+  workflow_dispatch:      # Allows manual runs
 
 jobs:
   download:
@@ -13,7 +13,7 @@ jobs:
       - name: Checkout repository without token
         uses: actions/checkout@v3
         with:
-          persist-credentials: false  # ⛔ disables default bot token
+          persist-credentials: false  # Disables default GitHub token
 
       - name: Set remote to use Personal Access Token
         env:
