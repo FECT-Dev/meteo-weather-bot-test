@@ -40,6 +40,15 @@ driver = webdriver.Chrome(
 driver.get("https://meteo.gov.lk/")
 wait = WebDriverWait(driver, 20)
 
+# ✅ Step 0: Click "English" to switch language
+try:
+    english_link = wait.until(EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), 'English')]")))
+    english_link.click()
+    print("✅ Switched to English version of the site")
+    time.sleep(2)  # allow language switch
+except Exception as e:
+    print("⚠️ Could not switch to English:", e)
+
 # ✅ Step 1: Click "Weather Data" button
 weather_data_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Weather Data')]")))
 weather_data_button.click()
