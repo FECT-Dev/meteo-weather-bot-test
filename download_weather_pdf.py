@@ -9,15 +9,15 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-# Create unique temp folder for Chrome user data
+# Temporary Chrome profile
 temp_user_data_dir = tempfile.mkdtemp()
 
-# Create a folder for today's date
+# Today's folder
 today = datetime.now().strftime('%Y-%m-%d')
 download_path = os.path.join(os.getcwd(), "downloads", today)
 os.makedirs(download_path, exist_ok=True)
 
-# Configure Chrome
+# Chrome setup
 chrome_options = Options()
 chrome_options.binary_location = os.path.abspath("./chrome-linux64/chrome")
 chrome_options.add_argument("--headless=new")
@@ -32,33 +32,34 @@ chrome_options.add_experimental_option("prefs", {
 
 # Start browser
 driver = webdriver.Chrome(
-    service=Service(executable_path=os.path.abspath("./chromedriver-linux64/chromedriver")),
+    service=Service(os.path.abspath("./chromedriver-linux64/chromedriver")),
     options=chrome_options
 )
 
-# Visit the site
-driver.get("https://meteo.gov.lk/")
-wait = WebDriverWait(driver, 20)
-
-# ✅ Step 0: Click "English" to switch language
 try:
-    english_link = wait.until(EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), 'English')]")))
-    english_link.click()
-    print("✅ Switched to English version of the site")
-    time.sleep(2)  # allow language switch
-except Exception as e:
-    print("⚠️ Could not switch to English:", e)
+    driver.get("https://meteo.gov.lk/")
+    wait = WebDriverWait(driver, 20)
 
-# ✅ Step 1: Click "Weather Data" button
-weather_data_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Weather Data')]")))
-weather_data_button.click()
+    # ✅ Step 1: Switch to English (important!)
+    try:
+        english_link = wait.until(EC.element_to_be_clickable((By.LINK_TEXT, "English")))
+        english_link.click()
+        time.sleep(2)
+    except Exception as e:
+        print("⚠️ Failed to switch language:", e)
 
-# ✅ Step 2: Wait and click "Weather Report for the 24hour Period" link
-pdf_link = wait.until(EC.element_to_be_clickable((By.LINK_TEXT, "Weather Report for the 24hour Period")))
-pdf_link.click()
+    # ✅ Step 2: Click "Weather Data"
+    weather_data_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Weather Data')]")))
+    weather_data_button.click()
 
-# ✅ Step 3: Wait for PDF to download
-time.sleep(10)
-driver.quit()
+    # ✅ Step 3: Click PDF link
+    pdf_link = wait.until(EC.element_to_be_clickable((By.LINK_TEXT, "Weather Report for the 24hour Period")))
+    pdf_link.click()
+
+    # ✅ Step 4: Wait for download
+    time.sleep(10)
+
+finally:
+    driver.quit()
 
 print(f"✅ Weather report downloaded to: {download_path}")
