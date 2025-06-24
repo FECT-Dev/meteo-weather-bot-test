@@ -6,11 +6,12 @@ from PyPDF2 import PdfReader
 reports_folder = "reports"
 summary_file = "weather_summary.csv"
 
-# Extract English lines only: e.g. "Anuradhapura 32.7 24.8 0.0"
+# Regex for station lines (English only)
 line_pattern = re.compile(r"^([A-Za-z \-]+?)\s+(TR|\d{1,2}\.\d)\s+(TR|\d{1,2}\.\d)\s+(TR|\d{1,3}\.\d)$")
+# Extract date in the format: 2025.06.19
 date_pattern = re.compile(r"ending at 0830SLTS? on this date\s*(\d{4}\.\d{2}\.\d{2})")
 
-# Load summary
+# Load existing summary
 if os.path.exists(summary_file):
     summary_df = pd.read_csv(summary_file)
 else:
@@ -18,13 +19,14 @@ else:
 
 new_rows = []
 
+# Process each report PDF
 for date_folder in sorted(os.listdir(reports_folder)):
     folder_path = os.path.join(reports_folder, date_folder)
     if not os.path.isdir(folder_path):
         continue
 
     for filename in os.listdir(folder_path):
-        if not filename.endswith(".pdf"):
+        if not filename.lower().endswith(".pdf"):
             continue
 
         pdf_path = os.path.join(folder_path, filename)
@@ -35,7 +37,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 page.extract_text() for page in reader.pages if page.extract_text()
             )
 
-            # Extract English date
+            # Extract actual date
             date_match = date_pattern.search(text)
             if not date_match:
                 print(f"⚠️ Date not found in {filename}. Skipping.")
@@ -43,10 +45,12 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
             actual_date = date_match.group(1).replace(".", "-")
 
+            # Skip if already processed
             if not summary_df.empty and (summary_df["Date"] == actual_date).any():
-                print(f"ℹ️ {actual_date} already exists. Skipping.")
+                print(f"ℹ️ {actual_date} already in summary. Skipping.")
                 continue
 
+            # Initialize rows for Max, Min, Rainfall
             row_rain = {"Date": actual_date, "Type": "Rainfall"}
             row_max = {"Date": actual_date, "Type": "Max"}
             row_min = {"Date": actual_date, "Type": "Min"}
@@ -56,6 +60,8 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 match = line_pattern.match(line)
                 if match:
                     station, max_val, min_val, rain_val = match.groups()
+                    station = station.strip()
+
                     row_rain[station] = rain_val
                     row_max[station] = max_val
                     row_min[station] = min_val
@@ -65,7 +71,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
         except Exception as e:
             print(f"❌ Failed to read {pdf_path}: {e}")
 
-# Save final summary
+# Save to CSV
 if new_rows:
     df_new = pd.DataFrame(new_rows)
     summary_df = pd.concat([summary_df, df_new], ignore_index=True)
