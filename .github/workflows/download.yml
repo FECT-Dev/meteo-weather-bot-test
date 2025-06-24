@@ -3,7 +3,7 @@ name: Daily Weather PDF Download
 on:
   schedule:
     - cron: '0 3 * * *'  # Runs daily at 03:00 UTC
-  workflow_dispatch:     # Allows manual runs
+  workflow_dispatch:
 
 jobs:
   download:
@@ -13,7 +13,7 @@ jobs:
       - name: Checkout repository without token
         uses: actions/checkout@v3
         with:
-          persist-credentials: false  # Disables default GitHub token
+          persist-credentials: false
 
       - name: Set remote to use Personal Access Token
         env:
@@ -25,6 +25,11 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.x'
+
+      - name: Install system dependencies for OCR
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr poppler-utils
 
       - name: Install Python dependencies
         run: pip install -r requirements.txt
@@ -46,7 +51,7 @@ jobs:
           mkdir -p reports/$TODAY
           mv downloads/$TODAY/*.pdf reports/$TODAY/weather-$TODAY.pdf
 
-      - name: Update summary table
+      - name: Update summary table with OCR
         run: python update_weather_summary.py
 
       - name: Commit and push to repo using PAT
