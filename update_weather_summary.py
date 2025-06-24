@@ -6,7 +6,7 @@ from PyPDF2 import PdfReader
 reports_folder = "reports"
 summary_file = "weather_summary.csv"
 
-# Updated regex to handle station names, TR values, and extra spacing
+# Pattern for station lines and date in the PDF
 line_pattern = re.compile(r"([A-Za-z \-]+?)\s+(TR|\d{1,2}\.\d)\s+(TR|\d{1,2}\.\d)\s+(TR|\d{1,3}\.\d)")
 date_pattern = re.compile(r"for the 24 hour period ending at 0830SLST on this date\s*([\d\.]+)")
 
@@ -18,7 +18,7 @@ else:
 
 new_rows = []
 
-# Go through reports/YYYY-MM-DD folders
+# Process each PDF in reports/yyyy-mm-dd/
 for date_folder in sorted(os.listdir(reports_folder)):
     folder_path = os.path.join(reports_folder, date_folder)
     if not os.path.isdir(folder_path):
@@ -42,37 +42,28 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
             actual_date = date_match.group(1).replace(".", "-")
 
-            # Skip if already in summary
             if (summary_df["Date"] == actual_date).any():
-                print(f"ℹ️ {actual_date} already exists. Skipping.")
+                print(f"ℹ️ {actual_date} already in summary. Skipping.")
                 continue
 
             for line in text.splitlines():
                 match = line_pattern.match(line.strip())
                 if match:
-                    station, max_temp, min_temp, rainfall = match.groups()
+                    station, max_val, min_val, rain_val = match.groups()
                     station = station.strip()
 
-                    for data_type, value in [
-                        ("Rainfall", rainfall),
-                        ("Max", max_temp),
-                        ("Min", min_temp),
-                    ]:
-                        new_rows.append({
-                            "Date": actual_date,
-                            "Type": data_type,
-                            "Station": station,
-                            "Value": value
-                        })
+                    new_rows.append({"Date": actual_date, "Type": "Rainfall", "Station": station, "Value": rain_val})
+                    new_rows.append({"Date": actual_date, "Type": "Max", "Station": station, "Value": max_val})
+                    new_rows.append({"Date": actual_date, "Type": "Min", "Station": station, "Value": min_val})
 
         except Exception as e:
             print(f"❌ Error reading {pdf_path}: {e}")
 
-# Append new data and save
+# Save summary
 if new_rows:
     new_df = pd.DataFrame(new_rows)
     summary_df = pd.concat([summary_df, new_df], ignore_index=True)
     summary_df.to_csv(summary_file, index=False)
     print(f"✅ Summary updated: {summary_file}")
 else:
-    print("⚠️ No new records found.")
+    print("⚠️ No new records to add.")
