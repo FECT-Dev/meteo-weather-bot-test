@@ -1,1 +1,4 @@
-Date,Type,Station,Value
+Date,Type
+0-0,Rainfall
+0-0,Max
+0-0,Min
