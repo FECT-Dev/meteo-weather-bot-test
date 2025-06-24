@@ -1,3 +1,4 @@
+# 📂 download_weather_pdf.py
 import os
 import time
 import tempfile
@@ -40,7 +41,7 @@ try:
     driver.get("https://meteo.gov.lk/")
     wait = WebDriverWait(driver, 20)
 
-    # ✅ Step 1: Switch to English (important!)
+    # ✅ Step 1: Switch to English
     try:
         english_link = wait.until(EC.element_to_be_clickable((By.LINK_TEXT, "English")))
         english_link.click()
