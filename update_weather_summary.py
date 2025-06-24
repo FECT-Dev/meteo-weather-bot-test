@@ -8,8 +8,6 @@ summary_file = "weather_summary.csv"
 
 # Pattern to extract lines: Station + Max + Min + Rain
 line_pattern = re.compile(r"([A-Za-z \-]+?)\s+(TR|\d{1,2}\.\d)\s+(TR|\d{1,2}\.\d)\s+(TR|\d{1,3}\.\d)")
-# Pattern to extract actual date
-date_pattern = re.compile(r"for the 24 hour period ending at 0830SLTS? on this date\s*([\d\.]+)")
 
 # Load existing summary
 if os.path.exists(summary_file):
@@ -34,24 +32,31 @@ for date_folder in sorted(os.listdir(reports_folder)):
         try:
             reader = PdfReader(pdf_path)
             text = "\n".join(p.extract_text() for p in reader.pages if p.extract_text())
+            lines = text.splitlines()
 
-            # Extract date from text
-            date_match = date_pattern.search(text)
-            if not date_match:
+            # Extract date from next line after "ending at 0830..."
+            actual_date = None
+            for i, line in enumerate(lines):
+                if "for the 24 hour period ending at 0830" in line:
+                    if i + 1 < len(lines):
+                        actual_date = lines[i + 1].strip().replace(".", "-")
+                    break
+
+            if not actual_date:
                 print(f"⚠️ Skipping {filename}, date not found")
                 continue
-
-            actual_date = date_match.group(1).replace(".", "-")
 
             # Skip if already added
             if not summary_df.empty and (summary_df["Date"] == actual_date).any():
                 print(f"ℹ️ {actual_date} already in summary.")
                 continue
 
-            # Dict to hold one day's record
-            record_max, record_min, record_rain = {"Date": actual_date, "Type": "Max"}, {"Date": actual_date, "Type": "Min"}, {"Date": actual_date, "Type": "Rainfall"}
+            # Dicts to hold one day's record
+            record_max = {"Date": actual_date, "Type": "Max"}
+            record_min = {"Date": actual_date, "Type": "Min"}
+            record_rain = {"Date": actual_date, "Type": "Rainfall"}
 
-            for line in text.splitlines():
+            for line in lines:
                 match = line_pattern.match(line.strip())
                 if match:
                     station, max_val, min_val, rain_val = match.groups()
