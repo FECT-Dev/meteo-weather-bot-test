@@ -6,16 +6,14 @@ from PyPDF2 import PdfReader
 reports_folder = "reports"
 summary_file = "weather_summary.csv"
 
-# Load or create the summary DataFrame
-if os.path.exists(summary_file):
-    summary_df = pd.read_csv(summary_file)
-else:
-    summary_df = pd.DataFrame(columns=["Date", "Type", "Station", "Value"])
-
-# Regex to extract station data and actual date from text
+# Patterns
 line_pattern = re.compile(r"^([A-Za-z \-]+)\s+(\d{1,2}\.\d)\s+(\d{1,2}\.\d)\s+(\d{1,3}\.\d)")
 date_pattern = re.compile(r"for the 24 hour period ending at 0830SLST on this date\s*([\d\.]+)")
 
+# Temporary list to store new data
+records = []
+
+# Loop through reports
 for date_folder in sorted(os.listdir(reports_folder)):
     folder_path = os.path.join(reports_folder, date_folder)
     if not os.path.isdir(folder_path):
@@ -31,35 +29,40 @@ for date_folder in sorted(os.listdir(reports_folder)):
             reader = PdfReader(pdf_path)
             text = "\n".join(page.extract_text() for page in reader.pages if page.extract_text())
 
-            # Extract actual date inside PDF
+            # Get actual date from PDF content
             date_match = date_pattern.search(text)
             if not date_match:
-                print(f"⚠️ Date not found in {filename}, skipping")
+                print(f"⚠️ Date not found in {filename}, skipping.")
                 continue
 
             actual_date = date_match.group(1).replace(".", "-")
-            if (summary_df["Date"] == actual_date).any():
-                print(f"ℹ️ Data for {actual_date} already exists. Skipping.")
-                continue
 
+            # Skip if already processed
+            if os.path.exists(summary_file):
+                existing = pd.read_csv(summary_file)
+                if (existing["Date"] == actual_date).any():
+                    print(f"ℹ️ Skipping {actual_date}, already processed.")
+                    continue
+
+            # Extract lines
             for line in text.splitlines():
                 match = line_pattern.match(line.strip())
                 if match:
                     station, max_temp, min_temp, rainfall = match.groups()
                     station = station.strip()
-
-                    summary_df = pd.concat([
-                        summary_df,
-                        pd.DataFrame([
-                            {"Date": actual_date, "Type": "Rainfall", "Station": station, "Value": rainfall},
-                            {"Date": actual_date, "Type": "Max", "Station": station, "Value": max_temp},
-                            {"Date": actual_date, "Type": "Min", "Station": station, "Value": min_temp},
-                        ])
-                    ], ignore_index=True)
+                    records.append({"Date": actual_date, "Type": "Rainfall", station: float(rainfall)})
+                    records.append({"Date": actual_date, "Type": "Max", station: float(max_temp)})
+                    records.append({"Date": actual_date, "Type": "Min", station: float(min_temp)})
 
         except Exception as e:
-            print(f"❌ Failed to read {pdf_path}: {e}")
+            print(f"❌ Error reading {pdf_path}: {e}")
 
-# Save updated summary
-summary_df.to_csv(summary_file, index=False)
-print("✅ Summary table updated:", summary_file)
+# Create final DataFrame and pivot
+if records:
+    df = pd.DataFrame(records)
+    summary = df.groupby(["Date", "Type"]).agg(lambda x: x.iloc[0]).reset_index()
+    summary = summary.fillna("...")
+    summary.to_csv(summary_file, index=False)
+    print("✅ Summary table updated:", summary_file)
+else:
+    print("⚠️ No new data found. Summary not updated.")
