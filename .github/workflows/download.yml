@@ -49,7 +49,12 @@ jobs:
         run: |
           TODAY=$(date +%Y-%m-%d)
           mkdir -p reports/$TODAY
-          mv downloads/$TODAY/*.pdf reports/$TODAY/weather-$TODAY.pdf || echo "No PDF found to move."
+          if ls downloads/$TODAY/*.pdf 1> /dev/null 2>&1; then
+            mv downloads/$TODAY/*.pdf reports/$TODAY/weather-$TODAY.pdf
+            echo "✅ Moved PDF to reports/$TODAY/"
+          else
+            echo "⚠️ No PDF downloaded. Skipping move."
+          fi
 
       - name: Update summary table with OCR
         run: python update_weather_summary.py
