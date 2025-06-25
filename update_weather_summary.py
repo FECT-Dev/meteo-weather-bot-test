@@ -3,16 +3,16 @@ import re
 import pandas as pd
 import pytesseract
 from pdf2image import convert_from_path
+from PIL import Image
 
 reports_folder = "reports"
 summary_file = "weather_summary.csv"
 
-# Match lines like: "Anuradhapura 32.7 24.8 0.0"
+# Match station lines (e.g. "Anuradhapura 32.7 24.8 0.0")
 line_pattern = re.compile(r"^([A-Za-z][A-Za-z \-]+?)\s+(TR|\d{1,2}\.\d)\s+(TR|\d{1,2}\.\d)\s+(TR|\d{1,3}\.\d)$")
-# Match date like: 2025.06.19 or 2025-06-19
 date_pattern = re.compile(r"ending at 0830SLTS? on this date\s*(\d{4})[.\-](\d{2})[.\-](\d{2})")
 
-# Load existing data
+# Load previous summary if exists
 if os.path.exists(summary_file):
     summary_df = pd.read_csv(summary_file)
 else:
@@ -20,27 +20,31 @@ else:
 
 new_rows = []
 
-# Scan all folders in /reports
+# Loop over each date folder in /reports
 for date_folder in sorted(os.listdir(reports_folder)):
     folder_path = os.path.join(reports_folder, date_folder)
     if not os.path.isdir(folder_path):
         continue
 
     for filename in os.listdir(folder_path):
-        if not filename.lower().endswith(".pdf"):
+        if not filename.endswith(".pdf"):
             continue
 
         pdf_path = os.path.join(folder_path, filename)
 
         try:
-            # Use OCR to extract text
+            # Convert PDF to image
             images = convert_from_path(pdf_path)
-            text = "\n".join(pytesseract.image_to_string(img) for img in images)
+            full_text = ""
+            for image in images:
+                gray = image.convert("L")  # grayscale
+                text = pytesseract.image_to_string(gray, lang="eng")
+                full_text += text + "\n"
 
-            # Extract actual date from content
-            date_match = date_pattern.search(text)
+            # Extract date from content
+            date_match = date_pattern.search(full_text)
             if not date_match:
-                print(f"⚠️ Date not found in {filename}, skipping.")
+                print(f"⚠️ Skipping {filename}, date not found")
                 continue
 
             year, month, day = date_match.groups()
@@ -50,14 +54,11 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 print(f"ℹ️ {actual_date} already exists. Skipping.")
                 continue
 
-            # Create rows for Rainfall / Max / Min
-            row_rain = {"Date": actual_date, "Type": "Rainfall"}
-            row_max = {"Date": actual_date, "Type": "Max"}
-            row_min = {"Date": actual_date, "Type": "Min"}
+            # Prepare rows for Rainfall / Max / Min
+            row_rain, row_max, row_min = {"Date": actual_date, "Type": "Rainfall"}, {"Date": actual_date, "Type": "Max"}, {"Date": actual_date, "Type": "Min"}
 
-            for line in text.splitlines():
-                line = line.strip()
-                match = line_pattern.match(line)
+            for line in full_text.splitlines():
+                match = line_pattern.match(line.strip())
                 if match:
                     station, max_val, min_val, rain_val = match.groups()
                     station = station.strip()
@@ -68,13 +69,13 @@ for date_folder in sorted(os.listdir(reports_folder)):
             new_rows.extend([row_rain, row_max, row_min])
 
         except Exception as e:
-            print(f"❌ Error reading {filename}: {e}")
+            print(f"❌ Error processing {filename}: {e}")
 
-# Save updated summary
+# Save to CSV
 if new_rows:
-    new_df = pd.DataFrame(new_rows)
-    summary_df = pd.concat([summary_df, new_df], ignore_index=True)
+    df_new = pd.DataFrame(new_rows)
+    summary_df = pd.concat([summary_df, df_new], ignore_index=True)
     summary_df.to_csv(summary_file, index=False)
-    print(f"✅ Summary updated: {summary_file}")
+    print("✅ Summary updated.")
 else:
-    print("⚠️ No valid data found.")
+    print("⚠️ No new data added.")
