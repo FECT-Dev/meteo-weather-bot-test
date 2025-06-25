@@ -20,11 +20,11 @@ date_pattern = re.compile(
     re.IGNORECASE
 )
 
-# Image preprocessing to improve OCR
+# Preprocess image to improve OCR accuracy
 def clean_ocr_image(image: Image.Image) -> Image.Image:
     return image.convert("L").point(lambda x: 0 if x < 150 else 255, "1")
 
-# Load existing summary
+# Load summary if it exists
 if os.path.exists(summary_file):
     summary_df = pd.read_csv(summary_file)
 else:
@@ -32,17 +32,17 @@ else:
 
 new_rows = []
 
-# Go through each PDF
+# Process each report PDF
 for date_folder in sorted(os.listdir(reports_folder)):
     folder_path = os.path.join(reports_folder, date_folder)
     if not os.path.isdir(folder_path):
         continue
 
-    for file in os.listdir(folder_path):
-        if not file.lower().endswith(".pdf"):
+    for filename in os.listdir(folder_path):
+        if not filename.lower().endswith(".pdf"):
             continue
 
-        pdf_path = os.path.join(folder_path, file)
+        pdf_path = os.path.join(folder_path, filename)
 
         try:
             images = convert_from_path(pdf_path, dpi=300)
@@ -51,12 +51,12 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 for img in images
             )
 
-            print(f"\n📄 OCR preview from '{file}':\n" + "\n".join(text.splitlines()[:15]))
+            print(f"\n📄 OCR preview from '{filename}':\n" + "\n".join(text.splitlines()[:15]))
 
             # Extract date
             date_match = date_pattern.search(text)
             if not date_match:
-                print(f"⚠️ Date not found in {file}. Skipping.")
+                print(f"⚠️ Date not found in {filename}. Skipping.")
                 continue
 
             year, month, day = map(int, date_match.groups())
@@ -77,8 +77,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 match = line_pattern.match(line)
                 if match:
                     station = match.group(1).strip().title()
-                    # skip invalid garbage lines
-                    if not station.replace(" ", "").isalpha():
+                    if not station.replace(" ", "").isalpha():  # Filter junk
                         continue
 
                     max_val = match.group(2).replace("TR", "0.0")
@@ -93,16 +92,16 @@ for date_folder in sorted(os.listdir(reports_folder)):
             if found_station:
                 new_rows.extend([row_rain, row_max, row_min])
             else:
-                print(f"❌ No station lines matched in {file}.")
+                print(f"❌ No station lines matched in {filename}.")
 
         except Exception as e:
-            print(f"❌ Error processing {file}: {e}")
+            print(f"❌ Error processing {filename}: {e}")
 
-# Save final summary
+# Save output
 if new_rows:
     df = pd.DataFrame(new_rows)
     summary_df = pd.concat([summary_df, df], ignore_index=True)
     summary_df.to_csv(summary_file, index=False)
-    print(f"✅ Summary updated: {summary_file}")
+    print(f"✅ Summary updated and saved to {summary_file}")
 else:
-    print("⚠️ No valid station data found.")
+    print("⚠️ No new valid data found.")
