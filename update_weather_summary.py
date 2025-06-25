@@ -11,7 +11,7 @@ summary_file = "weather_summary.csv"
 line_pattern = re.compile(r"^([A-Za-z][A-Za-z \-]+?)\s+(TR|\d{1,2}\.\d)\s+(TR|\d{1,2}\.\d)\s+(TR|\d{1,3}\.\d)$")
 date_pattern = re.compile(r"ending at 0830SLTS? on this date\s*(\d{4})[.\-](\d{2})[.\-](\d{2})")
 
-# Load existing summary
+# Load existing summary if available
 if os.path.exists(summary_file):
     summary_df = pd.read_csv(summary_file)
 else:
@@ -31,11 +31,11 @@ for date_folder in sorted(os.listdir(reports_folder)):
         pdf_path = os.path.join(folder_path, file)
 
         try:
-            # Convert PDF to image
+            # OCR-based text extraction
             images = convert_from_path(pdf_path, dpi=300)
             text = "\n".join([pytesseract.image_to_string(img) for img in images])
 
-            # Extract actual date
+            # Extract the actual date from the text
             date_match = date_pattern.search(text)
             if not date_match:
                 print(f"⚠️ Date not found in {file}")
@@ -46,28 +46,32 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 print(f"ℹ️ {actual_date} already exists. Skipping.")
                 continue
 
+            # Initialize row dicts
             row_rain = {"Date": actual_date, "Type": "Rainfall"}
             row_max = {"Date": actual_date, "Type": "Max"}
             row_min = {"Date": actual_date, "Type": "Min"}
 
             for line in text.splitlines():
-                match = line_pattern.match(line.strip())
+                line = line.strip()
+                match = line_pattern.match(line)
                 if match:
                     station, max_val, min_val, rain_val = match.groups()
+                    station = station.strip().title()
                     row_rain[station] = rain_val.replace("TR", "0.0")
                     row_max[station] = max_val.replace("TR", "0.0")
                     row_min[station] = min_val.replace("TR", "0.0")
 
+            # Add all 3 rows (Rainfall, Max, Min) for the day
             new_rows.extend([row_rain, row_max, row_min])
 
         except Exception as e:
-            print(f"❌ Failed to process {pdf_path}: {e}")
+            print(f"❌ Failed to process {file}: {e}")
 
-# Save CSV
+# Save the updated summary
 if new_rows:
     df = pd.DataFrame(new_rows)
     summary_df = pd.concat([summary_df, df], ignore_index=True)
     summary_df.to_csv(summary_file, index=False)
-    print("✅ Summary table updated:", summary_file)
+    print(f"✅ Summary table updated: {summary_file}")
 else:
     print("⚠️ No valid records found.")
