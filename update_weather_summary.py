@@ -1,14 +1,15 @@
 import os
 import re
 import pandas as pd
-from PyPDF2 import PdfReader
+import pytesseract
+from pdf2image import convert_from_path
 
 reports_folder = "reports"
 summary_file = "weather_summary.csv"
 
-# Match lines like: "Anuradhapura 32.7 24.8 0.0" (no symbols or Sinhala)
+# Match lines like: "Anuradhapura 32.7 24.8 0.0"
 line_pattern = re.compile(r"^([A-Za-z][A-Za-z \-]+?)\s+(TR|\d{1,2}\.\d)\s+(TR|\d{1,2}\.\d)\s+(TR|\d{1,3}\.\d)$")
-# Match date like: 2025.06.19
+# Match date like: 2025.06.19 or 2025-06-19
 date_pattern = re.compile(r"ending at 0830SLTS? on this date\s*(\d{4})[.\-](\d{2})[.\-](\d{2})")
 
 # Load existing data
@@ -19,6 +20,7 @@ else:
 
 new_rows = []
 
+# Scan all folders in /reports
 for date_folder in sorted(os.listdir(reports_folder)):
     folder_path = os.path.join(reports_folder, date_folder)
     if not os.path.isdir(folder_path):
@@ -31,12 +33,11 @@ for date_folder in sorted(os.listdir(reports_folder)):
         pdf_path = os.path.join(folder_path, filename)
 
         try:
-            reader = PdfReader(pdf_path)
-            text = "\n".join(
-                page.extract_text() for page in reader.pages if page.extract_text()
-            )
+            # Use OCR to extract text
+            images = convert_from_path(pdf_path)
+            text = "\n".join(pytesseract.image_to_string(img) for img in images)
 
-            # ✅ Extract date
+            # Extract actual date from content
             date_match = date_pattern.search(text)
             if not date_match:
                 print(f"⚠️ Date not found in {filename}, skipping.")
@@ -45,12 +46,11 @@ for date_folder in sorted(os.listdir(reports_folder)):
             year, month, day = date_match.groups()
             actual_date = f"{year}-{month}-{day}"
 
-            # Avoid duplicates
             if not summary_df.empty and (summary_df["Date"] == actual_date).any():
-                print(f"ℹ️ {actual_date} already exists, skipping.")
+                print(f"ℹ️ {actual_date} already exists. Skipping.")
                 continue
 
-            # Initialize row dicts
+            # Create rows for Rainfall / Max / Min
             row_rain = {"Date": actual_date, "Type": "Rainfall"}
             row_max = {"Date": actual_date, "Type": "Max"}
             row_min = {"Date": actual_date, "Type": "Min"}
@@ -61,7 +61,6 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 if match:
                     station, max_val, min_val, rain_val = match.groups()
                     station = station.strip()
-
                     row_rain[station] = rain_val.replace("TR", "0.0")
                     row_max[station] = max_val.replace("TR", "0.0")
                     row_min[station] = min_val.replace("TR", "0.0")
@@ -69,13 +68,13 @@ for date_folder in sorted(os.listdir(reports_folder)):
             new_rows.extend([row_rain, row_max, row_min])
 
         except Exception as e:
-            print(f"❌ Failed to process {filename}: {e}")
+            print(f"❌ Error reading {filename}: {e}")
 
-# Save
+# Save updated summary
 if new_rows:
     new_df = pd.DataFrame(new_rows)
     summary_df = pd.concat([summary_df, new_df], ignore_index=True)
     summary_df.to_csv(summary_file, index=False)
-    print("✅ Summary updated.")
+    print(f"✅ Summary updated: {summary_file}")
 else:
     print("⚠️ No valid data found.")
