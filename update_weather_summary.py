@@ -18,14 +18,16 @@ known_stations = [
     "Mullaitivu"
 ]
 
-def clean_image(img):
-    return img.convert("L").point(lambda x: 0 if x < 150 else 255, "1")
+# 🧼 Preprocess image for better OCR
+def clean_image(img: Image.Image) -> Image.Image:
+    img = img.convert("L")  # grayscale
+    return img.point(lambda x: 0 if x < 160 else 255, "1")  # binarize
 
 # 📄 Load existing summary
 summary_df = pd.read_csv(summary_file) if os.path.exists(summary_file) else pd.DataFrame()
 new_rows = []
 
-# 🔁 Process all PDF reports
+# 🔁 Loop through folders
 for date_folder in sorted(os.listdir(reports_folder)):
     folder_path = os.path.join(reports_folder, date_folder)
     if not os.path.isdir(folder_path):
@@ -36,21 +38,25 @@ for date_folder in sorted(os.listdir(reports_folder)):
             continue
 
         pdf_path = os.path.join(folder_path, file)
+
         try:
             images = convert_from_path(pdf_path, dpi=300)
-            text = "\n".join(pytesseract.image_to_string(clean_image(img), lang="eng", config="--psm 6") for img in images)
+            text = "\n".join(
+                pytesseract.image_to_string(clean_image(img), lang="eng", config="--psm 6")
+                for img in images
+            )
 
-            # 💾 Debug dump
+            # 💾 Debug OCR output
             with open(os.path.join(folder_path, "ocr_debug_output.txt"), "w", encoding="utf-8") as f:
                 f.write(text)
 
-            # 📅 Extract correct date from known context line
+            # 📅 Extract correct date from line with 0830 and period
             actual_date = None
             for line in text.splitlines():
                 if "0830" in line and "period" in line.lower():
-                    date_match = re.search(r"(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})", line)
-                    if date_match:
-                        y, m, d = map(int, date_match.groups())
+                    match = re.search(r"(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})", line)
+                    if match:
+                        y, m, d = map(int, match.groups())
                         actual_date = f"{y:04d}-{m:02d}-{d:02d}"
                         break
 
@@ -75,11 +81,14 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 station_raw = " ".join(parts[:-3])
                 max_val, min_val, rain_val = parts[-3:]
 
-                if not all(re.match(r"^(TR|\d{1,2}(\.\d)?)$", v) for v in [max_val, min_val, rain_val]):
+                # ⚠️ Check numeric values
+                if not all(re.fullmatch(r"(TR|\d{1,2}(\.\d)?)", v) for v in [max_val, min_val, rain_val]):
                     continue
 
-                match = get_close_matches(station_raw.title(), known_stations, n=1, cutoff=0.75)
+                # 🎯 Try fuzzy match to station list
+                match = get_close_matches(station_raw.strip().title(), known_stations, n=1, cutoff=0.75)
                 if not match:
+                    print(f"❌ Unmatched station: {station_raw}")
                     continue
 
                 station = match[0]
@@ -91,7 +100,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
             if found_station:
                 new_rows.extend([row_max, row_min, row_rain])
             else:
-                print(f"❌ No valid station data found in {file}")
+                print(f"⚠️ No valid station data found in {file}")
 
         except Exception as e:
             print(f"❌ Error processing {file}: {e}")
