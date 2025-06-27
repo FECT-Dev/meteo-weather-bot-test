@@ -9,6 +9,7 @@ from difflib import get_close_matches
 reports_folder = "reports"
 summary_file = "weather_summary.csv"
 
+# ✅ Known station names
 known_stations = [
     "Anuradhapura", "Badulla", "Bandarawela", "Batticaloa", "Colombo", "Galle",
     "Hambanthota", "Jaffna", "Monaragala", "Katugasthota", "Katunayake", "Kurunagala",
@@ -20,13 +21,11 @@ known_stations = [
 def clean_image(img):
     return img.convert("L").point(lambda x: 0 if x < 150 else 255, "1")
 
-if os.path.exists(summary_file):
-    summary_df = pd.read_csv(summary_file)
-else:
-    summary_df = pd.DataFrame()
-
+# 📄 Load existing summary
+summary_df = pd.read_csv(summary_file) if os.path.exists(summary_file) else pd.DataFrame()
 new_rows = []
 
+# 🔁 Process all PDF reports
 for date_folder in sorted(os.listdir(reports_folder)):
     folder_path = os.path.join(reports_folder, date_folder)
     if not os.path.isdir(folder_path):
@@ -37,19 +36,15 @@ for date_folder in sorted(os.listdir(reports_folder)):
             continue
 
         pdf_path = os.path.join(folder_path, file)
-
         try:
             images = convert_from_path(pdf_path, dpi=300)
-            text = "\n".join(
-                pytesseract.image_to_string(clean_image(img), lang="eng", config="--psm 6")
-                for img in images
-            )
+            text = "\n".join(pytesseract.image_to_string(clean_image(img), lang="eng", config="--psm 6") for img in images)
 
-            # 🔎 Write OCR for debugging
+            # 💾 Debug dump
             with open(os.path.join(folder_path, "ocr_debug_output.txt"), "w", encoding="utf-8") as f:
                 f.write(text)
 
-            # 🗓 Extract correct date line only
+            # 📅 Extract correct date from known context line
             actual_date = None
             for line in text.splitlines():
                 if "0830" in line and "period" in line.lower():
@@ -70,7 +65,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
             row_max = {"Date": actual_date, "Type": "Max"}
             row_min = {"Date": actual_date, "Type": "Min"}
             row_rain = {"Date": actual_date, "Type": "Rainfall"}
-            found = False
+            found_station = False
 
             for line in text.splitlines():
                 parts = line.strip().split()
@@ -80,7 +75,9 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 station_raw = " ".join(parts[:-3])
                 max_val, min_val, rain_val = parts[-3:]
 
-                # Try to match to known stations
+                if not all(re.match(r"^(TR|\d{1,2}(\.\d)?)$", v) for v in [max_val, min_val, rain_val]):
+                    continue
+
                 match = get_close_matches(station_raw.title(), known_stations, n=1, cutoff=0.75)
                 if not match:
                     continue
@@ -89,17 +86,17 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 row_max[station] = max_val.replace("TR", "0.0")
                 row_min[station] = min_val.replace("TR", "0.0")
                 row_rain[station] = rain_val.replace("TR", "0.0")
-                found = True
+                found_station = True
 
-            if found:
+            if found_station:
                 new_rows.extend([row_max, row_min, row_rain])
             else:
-                print(f"❌ No valid station data in {file}")
+                print(f"❌ No valid station data found in {file}")
 
         except Exception as e:
             print(f"❌ Error processing {file}: {e}")
 
-# Save final table
+# 💾 Save summary
 if new_rows:
     df = pd.DataFrame(new_rows)
     summary_df = pd.concat([summary_df, df], ignore_index=True)
