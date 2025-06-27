@@ -1,4 +1,4 @@
-# Ignore Chrome & driver folders
+# Ignore Chrome binaries and archives
 chrome-linux64/
 chromedriver-linux64/
 *.zip
@@ -6,5 +6,20 @@ chromedriver-linux64/
 # Ignore downloaded PDFs
 downloads/
 
-# Ignore Python cache
+# Ignore OCR debug outputs
+ocr_debug_output.txt
+
+# Ignore Python bytecode
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore virtual environments (if used)
+venv/
+env/
+
+# Ignore weather data cache
+*.log
+*.tmp
+*.bak
