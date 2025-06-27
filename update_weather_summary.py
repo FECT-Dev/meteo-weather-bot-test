@@ -9,7 +9,7 @@ from difflib import get_close_matches
 reports_folder = "reports"
 summary_file = "weather_summary.csv"
 
-# Known weather stations
+# Official list of weather stations
 known_stations = [
     "Anuradhapura", "Badulla", "Bandarawela", "Batticaloa", "Colombo", "Galle",
     "Hambanthota", "Jaffna", "Monaragala", "Katugasthota", "Katunayake", "Kurunagala",
@@ -18,11 +18,11 @@ known_stations = [
     "Mullaitivu"
 ]
 
-# OCR preprocessor
-def clean_image(img):
+# Helper: binarize image to improve OCR
+def clean_image(img: Image.Image) -> Image.Image:
     return img.convert("L").point(lambda x: 0 if x < 150 else 255, "1")
 
-# Load existing summary
+# Load existing summary file
 if os.path.exists(summary_file):
     summary_df = pd.read_csv(summary_file)
 else:
@@ -30,6 +30,7 @@ else:
 
 new_rows = []
 
+# Traverse report folders
 for date_folder in sorted(os.listdir(reports_folder)):
     folder_path = os.path.join(reports_folder, date_folder)
     if not os.path.isdir(folder_path):
@@ -42,22 +43,21 @@ for date_folder in sorted(os.listdir(reports_folder)):
         pdf_path = os.path.join(folder_path, file)
 
         try:
-            # Convert PDF to text
+            # OCR the PDF into text
             images = convert_from_path(pdf_path, dpi=300)
             text = "\n".join(
                 pytesseract.image_to_string(clean_image(img), lang="eng", config="--psm 6")
                 for img in images
             )
 
-            # Write full OCR output for debugging
-            debug_path = os.path.join(folder_path, "ocr_debug_output.txt")
-            with open(debug_path, "w", encoding="utf-8") as f:
+            # Save OCR output for debugging
+            with open(os.path.join(folder_path, "ocr_debug_output.txt"), "w", encoding="utf-8") as f:
                 f.write(text)
 
-            print(f"\n🔍 OCR Preview from {file}:\n", "\n".join(text.splitlines()[:20]))
+            print(f"\n📄 OCR preview from {file}:\n", "\n".join(text.splitlines()[:15]))
 
-            # Extract date
-            date_match = re.search(r"(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})", text)
+            # Extract date from text
+            date_match = re.search(r"(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})", text)
             if not date_match:
                 print(f"⚠️ Could not extract date from {file}")
                 continue
@@ -69,35 +69,42 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 print(f"ℹ️ {actual_date} already exists. Skipping.")
                 continue
 
-            # Initialize rows
-            row_rain = {"Date": actual_date, "Type": "Rainfall"}
+            # Prepare rows for this date
             row_max = {"Date": actual_date, "Type": "Max"}
             row_min = {"Date": actual_date, "Type": "Min"}
+            row_rain = {"Date": actual_date, "Type": "Rainfall"}
+            found_station = False
 
-            found = False
-
+            # Scan for lines that look like station data
             for line in text.splitlines():
                 parts = line.strip().split()
                 if len(parts) < 4:
                     continue
 
                 station_raw = " ".join(parts[:-3])
-                max_val, min_val, rain_val = parts[-3:]
+                try:
+                    max_val = parts[-3].replace("TR", "0.0")
+                    min_val = parts[-2].replace("TR", "0.0")
+                    rain_val = parts[-1].replace("TR", "0.0")
 
-                match = get_close_matches(station_raw.strip().title(), known_stations, n=1, cutoff=0.7)
-                if not match:
-                    continue  # Skip unmatched stations
+                    # Match to known stations
+                    matched = get_close_matches(station_raw.strip().title(), known_stations, n=1, cutoff=0.7)
+                    if not matched:
+                        continue
 
-                station = match[0]
-                row_max[station] = max_val.replace("TR", "0.0")
-                row_min[station] = min_val.replace("TR", "0.0")
-                row_rain[station] = rain_val.replace("TR", "0.0")
-                found = True
+                    station = matched[0]
+                    row_max[station] = max_val
+                    row_min[station] = min_val
+                    row_rain[station] = rain_val
+                    found_station = True
 
-            if found:
+                except Exception:
+                    continue  # Skip malformed lines
+
+            if found_station:
                 new_rows.extend([row_rain, row_max, row_min])
             else:
-                print(f"❌ No valid station rows matched in {file}.")
+                print(f"❌ No valid station rows matched in {file}")
 
         except Exception as e:
             print(f"❌ Error processing {file}: {e}")
