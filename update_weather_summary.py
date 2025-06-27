@@ -9,7 +9,6 @@ from difflib import get_close_matches
 reports_folder = "reports"
 summary_file = "weather_summary.csv"
 
-# Official station list (normalized, title case)
 known_stations = [
     "Anuradhapura", "Badulla", "Bandarawela", "Batticaloa", "Colombo", "Galle",
     "Hambanthota", "Jaffna", "Monaragala", "Katugasthota", "Katunayake", "Kurunagala",
@@ -18,11 +17,9 @@ known_stations = [
     "Mullaitivu"
 ]
 
-def clean_image(img: Image.Image) -> Image.Image:
-    """Convert to black and white for better OCR accuracy."""
+def clean_image(img):
     return img.convert("L").point(lambda x: 0 if x < 150 else 255, "1")
 
-# Load existing summary
 if os.path.exists(summary_file):
     summary_df = pd.read_csv(summary_file)
 else:
@@ -48,13 +45,11 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 for img in images
             )
 
-            # Save OCR for debug
+            # 🔎 Write OCR for debugging
             with open(os.path.join(folder_path, "ocr_debug_output.txt"), "w", encoding="utf-8") as f:
                 f.write(text)
 
-            print(f"\n🔍 OCR preview from {file}:\n", "\n".join(text.splitlines()[:15]))
-
-            # 🗓️ Extract date only from lines with 0830 and period
+            # 🗓 Extract correct date line only
             actual_date = None
             for line in text.splitlines():
                 if "0830" in line and "period" in line.lower():
@@ -65,18 +60,17 @@ for date_folder in sorted(os.listdir(reports_folder)):
                         break
 
             if not actual_date:
-                print(f"⚠️ Could not extract date from {file}")
+                print(f"⚠️ Date not found in {file}")
                 continue
 
             if not summary_df.empty and (summary_df["Date"] == actual_date).any():
                 print(f"ℹ️ {actual_date} already exists. Skipping.")
                 continue
 
-            # Initialize rows
             row_max = {"Date": actual_date, "Type": "Max"}
             row_min = {"Date": actual_date, "Type": "Min"}
             row_rain = {"Date": actual_date, "Type": "Rainfall"}
-            found_station = False
+            found = False
 
             for line in text.splitlines():
                 parts = line.strip().split()
@@ -86,12 +80,8 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 station_raw = " ".join(parts[:-3])
                 max_val, min_val, rain_val = parts[-3:]
 
-                if not re.match(r"^(TR|\d+(\.\d+)?)$", max_val) or \
-                   not re.match(r"^(TR|\d+(\.\d+)?)$", min_val) or \
-                   not re.match(r"^(TR|\d+(\.\d+)?)$", rain_val):
-                    continue  # Skip malformed lines
-
-                match = get_close_matches(station_raw.strip().title(), known_stations, n=1, cutoff=0.7)
+                # Try to match to known stations
+                match = get_close_matches(station_raw.title(), known_stations, n=1, cutoff=0.75)
                 if not match:
                     continue
 
@@ -99,17 +89,17 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 row_max[station] = max_val.replace("TR", "0.0")
                 row_min[station] = min_val.replace("TR", "0.0")
                 row_rain[station] = rain_val.replace("TR", "0.0")
-                found_station = True
+                found = True
 
-            if found_station:
-                new_rows.extend([row_rain, row_max, row_min])
+            if found:
+                new_rows.extend([row_max, row_min, row_rain])
             else:
-                print(f"❌ No valid station rows matched in {file}")
+                print(f"❌ No valid station data in {file}")
 
         except Exception as e:
             print(f"❌ Error processing {file}: {e}")
 
-# Save summary
+# Save final table
 if new_rows:
     df = pd.DataFrame(new_rows)
     summary_df = pd.concat([summary_df, df], ignore_index=True)
