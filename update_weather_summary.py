@@ -9,7 +9,7 @@ from difflib import get_close_matches
 reports_folder = "reports"
 summary_file = "weather_summary.csv"
 
-# Known station names
+# Known weather stations
 known_stations = [
     "Anuradhapura", "Badulla", "Bandarawela", "Batticaloa", "Colombo", "Galle",
     "Hambanthota", "Jaffna", "Monaragala", "Katugasthota", "Katunayake", "Kurunagala",
@@ -18,10 +18,11 @@ known_stations = [
     "Mullaitivu"
 ]
 
+# OCR preprocessor
 def clean_image(img):
     return img.convert("L").point(lambda x: 0 if x < 150 else 255, "1")
 
-# Load existing data
+# Load existing summary
 if os.path.exists(summary_file):
     summary_df = pd.read_csv(summary_file)
 else:
@@ -29,7 +30,6 @@ else:
 
 new_rows = []
 
-# Loop through folders
 for date_folder in sorted(os.listdir(reports_folder)):
     folder_path = os.path.join(reports_folder, date_folder)
     if not os.path.isdir(folder_path):
@@ -42,14 +42,24 @@ for date_folder in sorted(os.listdir(reports_folder)):
         pdf_path = os.path.join(folder_path, file)
 
         try:
+            # Convert PDF to text
             images = convert_from_path(pdf_path, dpi=300)
-            text = "\n".join(pytesseract.image_to_string(clean_image(img), lang="eng") for img in images)
+            text = "\n".join(
+                pytesseract.image_to_string(clean_image(img), lang="eng", config="--psm 6")
+                for img in images
+            )
 
-            # Restrict date extraction to relevant context
-            date_line = next((line for line in text.splitlines() if "0830" in line and "SLST" in line), "")
-            date_match = re.search(r"(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})", date_line)
+            # Write full OCR output for debugging
+            debug_path = os.path.join(folder_path, "ocr_debug_output.txt")
+            with open(debug_path, "w", encoding="utf-8") as f:
+                f.write(text)
+
+            print(f"\n🔍 OCR Preview from {file}:\n", "\n".join(text.splitlines()[:20]))
+
+            # Extract date
+            date_match = re.search(r"(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})", text)
             if not date_match:
-                print(f"⚠️ Could not find date in: {file}")
+                print(f"⚠️ Could not extract date from {file}")
                 continue
 
             y, m, d = map(int, date_match.groups())
@@ -64,7 +74,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
             row_max = {"Date": actual_date, "Type": "Max"}
             row_min = {"Date": actual_date, "Type": "Min"}
 
-            found_any = False
+            found = False
 
             for line in text.splitlines():
                 parts = line.strip().split()
@@ -74,33 +84,29 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 station_raw = " ".join(parts[:-3])
                 max_val, min_val, rain_val = parts[-3:]
 
-                # Fuzzy match station
-                station_match = get_close_matches(station_raw.strip().title(), known_stations, n=1, cutoff=0.7)
-                if not station_match:
-                    continue
+                match = get_close_matches(station_raw.strip().title(), known_stations, n=1, cutoff=0.7)
+                if not match:
+                    continue  # Skip unmatched stations
 
-                station = station_match[0]
-                try:
-                    row_max[station] = max_val.replace("TR", "0.0")
-                    row_min[station] = min_val.replace("TR", "0.0")
-                    row_rain[station] = rain_val.replace("TR", "0.0")
-                    found_any = True
-                except:
-                    continue
+                station = match[0]
+                row_max[station] = max_val.replace("TR", "0.0")
+                row_min[station] = min_val.replace("TR", "0.0")
+                row_rain[station] = rain_val.replace("TR", "0.0")
+                found = True
 
-            if found_any:
+            if found:
                 new_rows.extend([row_rain, row_max, row_min])
             else:
-                print(f"❌ No station lines matched in {file}.")
+                print(f"❌ No valid station rows matched in {file}.")
 
         except Exception as e:
-            print(f"❌ Failed to process {file}: {e}")
+            print(f"❌ Error processing {file}: {e}")
 
-# Save the final CSV
+# Save to CSV
 if new_rows:
     df = pd.DataFrame(new_rows)
     summary_df = pd.concat([summary_df, df], ignore_index=True)
     summary_df.to_csv(summary_file, index=False)
-    print(f"✅ Weather summary updated: {summary_file}")
+    print(f"✅ Summary updated: {summary_file}")
 else:
-    print("⚠️ No valid station data found.")
+    print("⚠️ No new valid station data found.")
