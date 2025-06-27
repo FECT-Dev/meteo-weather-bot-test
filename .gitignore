@@ -1,0 +1,10 @@
+# Ignore Chrome & driver folders
+chrome-linux64/
+chromedriver-linux64/
+*.zip
+
+# Ignore downloaded PDFs
+downloads/
+
+# Ignore Python cache
+__pycache__/
