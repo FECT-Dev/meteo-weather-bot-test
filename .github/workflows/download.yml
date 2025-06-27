@@ -59,6 +59,12 @@ jobs:
       - name: Update summary table with OCR
         run: python update_weather_summary.py
 
+      - name: Show Git status before commit (for debugging)
+        run: |
+          echo "🔍 Git status before committing:"
+          git status
+          git diff --stat || true
+
       - name: Commit and push to repo using PAT
         env:
           TOKEN: ${{ secrets.ACTIONS_PAT }}
@@ -66,7 +72,7 @@ jobs:
           git config --global user.name "Auto Commit Bot"
           git config --global user.email "actions@github.com"
           git pull origin main
-          git add reports/ weather_summary.csv || true
+          git add -A
           if git diff --cached --quiet; then
             echo "✅ No changes to commit."
           else
