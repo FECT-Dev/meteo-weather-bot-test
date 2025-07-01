@@ -18,22 +18,37 @@ known_stations = [
     "Mullaitivu"
 ]
 
-# ✅ Common misreads you know happen (add more if you see them)
+# 🗂️ Common OCR station alias corrections
 alias_map = {
     "Kurunagala": "Kurunegala",
-    "Colo mb o": "Colombo",
+    "Katu Gasthota": "Katugasthota",
+    "Colombo.": "Colombo",
     "Nuwara Eli ya": "Nuwara Eliya",
+    "Rathnapuura": "Rathnapura",
 }
 
-def clean_image(img):
+# === OCR CLEANER ===
+def clean_image(img: Image.Image) -> Image.Image:
     img = img.convert("L")
     return img.point(lambda x: 0 if x < 160 else 255, "1")
 
-# === Load Existing ===
-summary_df = pd.read_csv(summary_file) if os.path.exists(summary_file) else pd.DataFrame()
+# === LOAD EXISTING ===
+if os.path.exists(summary_file):
+    summary_df = pd.read_csv(summary_file)
+else:
+    summary_df = pd.DataFrame()
+
 new_rows = []
 
-# === Process PDFs ===
+# === REGEX ===
+line_pattern = re.compile(
+    r"^(.+?)\s+"
+    r"(TR|\d{1,3}(\.\d+)?)\s+"
+    r"(TR|\d{1,3}(\.\d+)?)\s+"
+    r"(TR|\d{1,3}(\.\d+)?)$"
+)
+
+# === PROCESS ===
 for date_folder in sorted(os.listdir(reports_folder)):
     folder_path = os.path.join(reports_folder, date_folder)
     if not os.path.isdir(folder_path):
@@ -44,6 +59,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
             continue
 
         pdf_path = os.path.join(folder_path, file)
+
         try:
             images = convert_from_path(pdf_path, dpi=300)
             text = "\n".join(
@@ -51,10 +67,12 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 for img in images
             )
 
-            with open(os.path.join(folder_path, "ocr_debug_output.txt"), "w") as f:
+            # Save debug OCR output
+            debug_out = os.path.join(folder_path, "ocr_debug_output.txt")
+            with open(debug_out, "w", encoding="utf-8") as f:
                 f.write(text)
 
-            # 🗓 Extract date from trusted line
+            # === DATE ===
             actual_date = None
             for line in text.splitlines():
                 if "0830" in line and "period" in line.lower():
@@ -65,11 +83,17 @@ for date_folder in sorted(os.listdir(reports_folder)):
                         break
 
             if not actual_date:
+                fallback = re.search(r"(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})", text)
+                if fallback:
+                    y, mth, d = map(int, fallback.groups())
+                    actual_date = f"{y:04d}-{mth:02d}-{d:02d}"
+
+            if not actual_date:
                 print(f"⚠️ Skipping {file} — date not found.")
                 continue
 
             if not summary_df.empty and (summary_df["Date"] == actual_date).any():
-                print(f"ℹ️ {actual_date} already exists — skipping.")
+                print(f"ℹ️ Skipping {actual_date} — already exists.")
                 continue
 
             row_max = {"Date": actual_date, "Type": "Max"}
@@ -80,49 +104,47 @@ for date_folder in sorted(os.listdir(reports_folder)):
             found = False
 
             for line in text.splitlines():
-                numbers = re.findall(r"(TR|\d{1,3}(?:\.\d+)?)", line)
-                if len(numbers) != 3:
+                match = line_pattern.match(line.strip())
+                if not match:
                     continue
 
-                station_part = line
-                for num in numbers:
-                    station_part = station_part.replace(num, "")
-                station_raw = station_part.strip().title()
-
-                # Fix known misreads
+                station_raw = match.group(1).strip()
                 station_raw = alias_map.get(station_raw, station_raw)
 
-                match = get_close_matches(station_raw, known_stations, n=1, cutoff=0.75)
-                if not match or len(station_raw) < 3:
-                    unmatched.append(f"{station_raw} | {numbers} | {line}")
+                max_val = match.group(2)
+                min_val = match.group(4)
+                rain_val = match.group(6)
+
+                matched = get_close_matches(station_raw.title(), known_stations, n=1, cutoff=0.7)
+                if not matched:
+                    unmatched.append(line)
                     continue
 
-                station = match[0]
-                row_max[station] = numbers[0].replace("TR", "0.0")
-                row_min[station] = numbers[1].replace("TR", "0.0")
-                row_rain[station] = numbers[2].replace("TR", "0.0")
+                station = matched[0]
+                row_max[station] = max_val.replace("TR", "0.0")
+                row_min[station] = min_val.replace("TR", "0.0")
+                row_rain[station] = rain_val.replace("TR", "0.0")
                 found = True
 
             if unmatched:
                 unmatched_file = os.path.join(folder_path, "ocr_unmatched_lines.txt")
-                with open(unmatched_file, "w") as f:
+                with open(unmatched_file, "w", encoding="utf-8") as f:
                     f.write("\n".join(unmatched))
-                print(f"⚠️ Saved unmatched lines: {unmatched_file}")
 
             if found:
                 new_rows.extend([row_max, row_min, row_rain])
-                print(f"✅ Added: {actual_date} with {len(row_max)-2} stations")
+                print(f"✅ Added data for {actual_date}")
             else:
-                print(f"⚠️ No valid stations found in {file}")
+                print(f"⚠️ No valid stations in {file}")
 
         except Exception as e:
-            print(f"❌ Error processing {file}: {e}")
+            print(f"❌ Error: {e}")
 
-# === Save Final ===
+# === SAVE FINAL ===
 if new_rows:
     df = pd.DataFrame(new_rows)
     summary_df = pd.concat([summary_df, df], ignore_index=True)
     summary_df.to_csv(summary_file, index=False)
-    print(f"✅ Final saved: {summary_file} with {len(summary_df)} rows")
+    print(f"✅ Final summary saved: {summary_file} ({len(summary_df)} rows)")
 else:
-    print("⚠️ No new valid data.")
+    print("⚠️ No new valid data added.")
