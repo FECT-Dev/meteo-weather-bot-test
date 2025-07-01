@@ -10,7 +10,6 @@ from difflib import get_close_matches
 reports_folder = "reports"
 summary_file = "weather_summary.csv"
 
-# === Official stations list ===
 known_stations = [
     "Anuradhapura","Badulla","Bandarawela","Batticaloa","Colombo","Galle",
     "Hambanthota","Jaffna","Monaragala","Katugasthota","Katunayake","Kurunegala",
@@ -19,30 +18,28 @@ known_stations = [
     "Mullaitivu"
 ]
 
-# === OCR helper ===
+# === OCR Image Cleaner ===
 def clean_image(img: Image.Image) -> Image.Image:
     return img.convert("L").point(lambda x: 0 if x < 160 else 255, "1")
 
-# === Clean numeric safely ===
+# === Fix weird OCR numbers ===
 def safe_number(v):
     v = v.upper().replace("O", "0").replace("|", "1").replace("I", "1").replace("l", "1")
     if v == "TR": return "0.0"
     try: return str(float(v))
     except: return "0.0"
 
-# === Load ===
+# === LOAD existing CSV ===
 summary_df = pd.read_csv(summary_file) if os.path.exists(summary_file) else pd.DataFrame()
 new_rows = []
 
-# === Process PDFs ===
+# === PROCESS PDFs ===
 for date_folder in sorted(os.listdir(reports_folder)):
     folder_path = os.path.join(reports_folder, date_folder)
-    if not os.path.isdir(folder_path):
-        continue
+    if not os.path.isdir(folder_path): continue
 
     for file in os.listdir(folder_path):
-        if not file.endswith(".pdf"):
-            continue
+        if not file.endswith(".pdf"): continue
 
         pdf_path = os.path.join(folder_path, file)
 
@@ -53,11 +50,11 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 for img in images
             )
 
-            # Save OCR text for inspection
+            # Save OCR debug output
             with open(os.path.join(folder_path, "ocr_debug_output.txt"), "w") as f:
                 f.write(text)
 
-            # === Date only from trusted line ===
+            # === Extract date from trusted line ===
             actual_date = None
             for line in text.splitlines():
                 if "0830" in line and "period" in line.lower():
@@ -84,18 +81,20 @@ for date_folder in sorted(os.listdir(reports_folder)):
             for line in text.splitlines():
                 numbers = re.findall(r"(TR|\d{1,3}(?:\.\d+)?)", line)
                 numbers = [n[0] if isinstance(n, tuple) else n for n in numbers]
-                if len(numbers) != 3:
-                    continue
+                if len(numbers) != 3: continue
 
+                # === Smart station extraction ===
                 station_guess = line
                 for num in numbers:
                     station_guess = station_guess.replace(num, "")
                 station_guess = station_guess.strip()
+                # ✅ Take ONLY the last word to drop Sinhala/Tamil
+                station_part = station_guess.split()[-1]
 
-                cutoff = 0.70 if len(station_guess) > 4 else 0.5
-                match = get_close_matches(station_guess.title(), known_stations, n=1, cutoff=cutoff)
+                cutoff = 0.70 if len(station_part) > 4 else 0.5
+                match = get_close_matches(station_part.title(), known_stations, n=1, cutoff=cutoff)
                 if not match:
-                    unmatched.append(f"{station_guess} | {numbers}")
+                    unmatched.append(f"{station_part} | {numbers}")
                     continue
 
                 station = match[0]
@@ -117,7 +116,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
         except Exception as e:
             print(f"❌ Error processing {file}: {e}")
 
-# === Save result ===
+# === Save final CSV ===
 if new_rows:
     df = pd.DataFrame(new_rows)
     summary_df = pd.concat([summary_df, df], ignore_index=True)
