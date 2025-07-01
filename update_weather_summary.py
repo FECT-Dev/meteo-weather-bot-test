@@ -6,28 +6,34 @@ import pytesseract
 from PIL import Image
 from difflib import get_close_matches
 
+# === SETTINGS ===
 reports_folder = "reports"
 summary_file = "weather_summary.csv"
 
 known_stations = [
-   "Anuradhapura", "Badulla", "Bandarawela", "Batticaloa", "Colombo", "Galle",
-   "Hambanthota", "Jaffna", "Monaragala", "Katugasthota", "Katunayake", "Kurunagala",
-   "Maha Illuppallama", "Mannar", "Polonnaruwa", "Nuwara Eliya", "Pothuvil",
-   "Puttalam", "Rathmalana", "Rathnapura", "Trincomalee", "Vavuniya", "Mattala",
-   "Mullaitivu"
+    "Anuradhapura", "Badulla", "Bandarawela", "Batticaloa", "Colombo", "Galle",
+    "Hambanthota", "Jaffna", "Monaragala", "Katugasthota", "Katunayake", "Kurunegala",
+    "Maha Illuppallama", "Mannar", "Polonnaruwa", "Nuwara Eliya", "Pothuvil",
+    "Puttalam", "Rathmalana", "Rathnapura", "Trincomalee", "Vavuniya", "Mattala",
+    "Mullaitivu"
 ]
+
+# ✅ Common misreads you know happen (add more if you see them)
+alias_map = {
+    "Kurunagala": "Kurunegala",
+    "Colo mb o": "Colombo",
+    "Nuwara Eli ya": "Nuwara Eliya",
+}
 
 def clean_image(img):
     img = img.convert("L")
     return img.point(lambda x: 0 if x < 160 else 255, "1")
 
-if os.path.exists(summary_file):
-    summary_df = pd.read_csv(summary_file)
-else:
-    summary_df = pd.DataFrame()
-
+# === Load Existing ===
+summary_df = pd.read_csv(summary_file) if os.path.exists(summary_file) else pd.DataFrame()
 new_rows = []
 
+# === Process PDFs ===
 for date_folder in sorted(os.listdir(reports_folder)):
     folder_path = os.path.join(reports_folder, date_folder)
     if not os.path.isdir(folder_path):
@@ -48,6 +54,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
             with open(os.path.join(folder_path, "ocr_debug_output.txt"), "w") as f:
                 f.write(text)
 
+            # 🗓 Extract date from trusted line
             actual_date = None
             for line in text.splitlines():
                 if "0830" in line and "period" in line.lower():
@@ -58,9 +65,11 @@ for date_folder in sorted(os.listdir(reports_folder)):
                         break
 
             if not actual_date:
+                print(f"⚠️ Skipping {file} — date not found.")
                 continue
 
             if not summary_df.empty and (summary_df["Date"] == actual_date).any():
+                print(f"ℹ️ {actual_date} already exists — skipping.")
                 continue
 
             row_max = {"Date": actual_date, "Type": "Max"}
@@ -78,10 +87,13 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 station_part = line
                 for num in numbers:
                     station_part = station_part.replace(num, "")
-                station_raw = station_part.strip()
+                station_raw = station_part.strip().title()
 
-                match = get_close_matches(station_raw.title(), known_stations, n=1, cutoff=0.85)
-                if not match or len(station_raw) < 4:
+                # Fix known misreads
+                station_raw = alias_map.get(station_raw, station_raw)
+
+                match = get_close_matches(station_raw, known_stations, n=1, cutoff=0.75)
+                if not match or len(station_raw) < 3:
                     unmatched.append(f"{station_raw} | {numbers} | {line}")
                     continue
 
@@ -92,19 +104,25 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 found = True
 
             if unmatched:
-                with open(os.path.join(folder_path, "ocr_unmatched_lines.txt"), "w") as f:
+                unmatched_file = os.path.join(folder_path, "ocr_unmatched_lines.txt")
+                with open(unmatched_file, "w") as f:
                     f.write("\n".join(unmatched))
+                print(f"⚠️ Saved unmatched lines: {unmatched_file}")
 
             if found:
                 new_rows.extend([row_max, row_min, row_rain])
+                print(f"✅ Added: {actual_date} with {len(row_max)-2} stations")
+            else:
+                print(f"⚠️ No valid stations found in {file}")
 
         except Exception as e:
-            print(f"❌ Error: {e}")
+            print(f"❌ Error processing {file}: {e}")
 
+# === Save Final ===
 if new_rows:
     df = pd.DataFrame(new_rows)
     summary_df = pd.concat([summary_df, df], ignore_index=True)
     summary_df.to_csv(summary_file, index=False)
-    print(f"✅ Final saved {summary_file}")
+    print(f"✅ Final saved: {summary_file} with {len(summary_df)} rows")
 else:
     print("⚠️ No new valid data.")
