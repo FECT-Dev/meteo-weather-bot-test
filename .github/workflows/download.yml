@@ -3,7 +3,7 @@ name: Daily Weather PDF Download
 on:
   schedule:
     - cron: '0 3 * * *'  # Runs daily at 03:00 UTC
-  workflow_dispatch:     # Allows manual runs
+  workflow_dispatch:
 
 jobs:
   download:
@@ -26,10 +26,10 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Install system dependencies for OCR
+      - name: Install system dependencies for Camelot & OCR
         run: |
           sudo apt-get update
-          sudo apt-get install -y tesseract-ocr poppler-utils
+          sudo apt-get install -y ghostscript python3-tk tesseract-ocr poppler-utils
 
       - name: Install Python dependencies
         run: pip install -r requirements.txt
@@ -56,7 +56,7 @@ jobs:
             echo "⚠️ No PDF downloaded. Skipping move."
           fi
 
-      - name: Update summary table with OCR
+      - name: Update summary table with Camelot + OCR
         run: python update_weather_summary.py
 
       - name: Show Git status before commit (debug)
