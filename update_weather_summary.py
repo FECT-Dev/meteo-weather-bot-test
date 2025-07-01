@@ -17,7 +17,7 @@ known_stations = [
 
 def safe_number(v):
     """Fix common OCR weirdness."""
-    v = v.upper().replace("O", "0").replace("|", "1").replace("I", "1").replace("l", "1")
+    v = str(v).upper().replace("O", "0").replace("|", "1").replace("I", "1").replace("l", "1")
     if "TR" in v: return "0.0"
     try: return str(float(v))
     except: return "0.0"
@@ -26,7 +26,7 @@ def safe_number(v):
 summary_df = pd.read_csv(summary_file) if os.path.exists(summary_file) else pd.DataFrame()
 new_rows = []
 
-# === Process PDFs ===
+# === Process each folder ===
 for date_folder in sorted(os.listdir(reports_folder)):
     folder_path = os.path.join(reports_folder, date_folder)
     if not os.path.isdir(folder_path): continue
@@ -37,14 +37,14 @@ for date_folder in sorted(os.listdir(reports_folder)):
         pdf_path = os.path.join(folder_path, file)
 
         try:
-            # === Extract date from PDF filename or folder name ===
-            actual_date = date_folder  # safer than OCR date
-            if not actual_date:
-                print(f"⚠️ Skipping {file}: date not found.")
+            # === Use folder name as date ===
+            actual_date = date_folder
+            if not re.match(r"\d{4}-\d{2}-\d{2}", actual_date):
+                print(f"⚠️ Skipping {file}: invalid folder date {actual_date}")
                 continue
 
             if not summary_df.empty and (summary_df["Date"] == actual_date).any():
-                print(f"ℹ️ {actual_date} already exists.")
+                print(f"ℹ️ Skipping {actual_date} — already in CSV.")
                 continue
 
             # === Extract tables ===
@@ -54,23 +54,28 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 continue
 
             df = tables[0].df
+            # Remove extra header rows if needed
             df.columns = ["Station", "Max", "Min", "Rainfall"]
+            df = df.drop(0, errors="ignore")
 
-            # Save raw table for debug
+            # === Debug save raw table ===
             df.to_csv(os.path.join(folder_path, "camelot_table_debug.csv"), index=False)
 
             row_max = {"Date": actual_date, "Type": "Max"}
             row_min = {"Date": actual_date, "Type": "Min"}
             row_rain = {"Date": actual_date, "Type": "Rainfall"}
-            found = False
             unmatched = []
+            found = False
 
-            for i, row in df.iterrows():
-                if i == 0: continue  # skip header row
-                station_raw = row["Station"].strip().title()
+            for _, row in df.iterrows():
+                station_raw = str(row["Station"]).strip()
+                if not station_raw or len(station_raw) < 3:
+                    continue
+
+                # Fuzzy match: more forgiving match
                 match = [s for s in known_stations if s.lower() in station_raw.lower()]
                 if not match:
-                    unmatched.append(station_raw)
+                    unmatched.append(f"{station_raw} | {row['Max']} | {row['Min']} | {row['Rainfall']}")
                     continue
 
                 station = match[0]
@@ -85,14 +90,14 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
             if found:
                 new_rows.extend([row_max, row_min, row_rain])
-                print(f"✅ Added {actual_date} — Stations: {len(row_max)-2}")
+                print(f"✅ Added {actual_date} — {len(row_max)-2} stations")
             else:
                 print(f"⚠️ {file}: No valid stations matched.")
 
         except Exception as e:
             print(f"❌ {file} — {e}")
 
-# === Save result ===
+# === Save final summary ===
 if new_rows:
     df = pd.DataFrame(new_rows)
     summary_df = pd.concat([summary_df, df], ignore_index=True)
