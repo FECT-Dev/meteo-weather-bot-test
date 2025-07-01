@@ -6,7 +6,6 @@ import pytesseract
 from PIL import Image
 from difflib import get_close_matches
 
-# === SETTINGS ===
 reports_folder = "reports"
 summary_file = "weather_summary.csv"
 
@@ -18,15 +17,12 @@ known_stations = [
     "Mullaitivu"
 ]
 
-# === OCR Image Cleaner ===
 def clean_image(img):
     img = img.convert("L")
     return img.point(lambda x: 0 if x < 160 else 255, "1")
 
 summary_df = pd.read_csv(summary_file) if os.path.exists(summary_file) else pd.DataFrame()
 new_rows = []
-
-line_pattern = re.compile(r"^(.+?)\s+(TR|\d{1,3}(\.\d+)?)\s+(TR|\d{1,3}(\.\d+)?)\s+(TR|\d{1,3}(\.\d+)?)$")
 
 for date_folder in sorted(os.listdir(reports_folder)):
     folder_path = os.path.join(reports_folder, date_folder)
@@ -46,10 +42,11 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 for img in images
             )
 
-            # Save OCR
+            # Save raw OCR for troubleshooting
             with open(os.path.join(folder_path, "ocr_debug_output.txt"), "w") as f:
                 f.write(text)
 
+            # Extract date only from trusted line
             actual_date = None
             for line in text.splitlines():
                 if "0830" in line and "period" in line.lower():
@@ -60,11 +57,11 @@ for date_folder in sorted(os.listdir(reports_folder)):
                         break
 
             if not actual_date:
-                print(f"⚠️ Skipping {file}: no date found")
+                print(f"⚠️ Skipping {file}: date not found.")
                 continue
 
             if not summary_df.empty and (summary_df["Date"] == actual_date).any():
-                print(f"ℹ️ {actual_date} already exists — skip")
+                print(f"ℹ️ {actual_date} already exists — skip.")
                 continue
 
             row_max, row_min, row_rain = {"Date": actual_date, "Type": "Max"}, {"Date": actual_date, "Type": "Min"}, {"Date": actual_date, "Type": "Rainfall"}
@@ -72,22 +69,24 @@ for date_folder in sorted(os.listdir(reports_folder)):
             unmatched_debug = []
 
             for line in text.splitlines():
-                m = line_pattern.match(line.strip())
-                if not m:
+                parts = line.strip().split()
+                numbers = [p for p in parts if re.fullmatch(r"(TR|\d{1,3}(\.\d+)?)", p)]
+                if len(numbers) != 3:
                     continue
 
-                station_raw = m.group(1).strip()
-                max_val, min_val, rain_val = m.group(2), m.group(4), m.group(6)
+                station_candidate = line
+                for num in numbers:
+                    station_candidate = station_candidate.replace(num, "").strip()
 
-                matches = get_close_matches(station_raw.title(), known_stations, n=1, cutoff=0.6)
-                if not matches:
-                    unmatched_debug.append(f"NO MATCH: {station_raw} => {max_val} {min_val} {rain_val}")
+                match = get_close_matches(station_candidate.title(), known_stations, n=1, cutoff=0.7)
+                if not match:
+                    unmatched_debug.append(f"Unmatched: {station_candidate} -> {numbers} -> line: {line}")
                     continue
 
-                station = matches[0]
-                row_max[station] = max_val.replace("TR", "0.0")
-                row_min[station] = min_val.replace("TR", "0.0")
-                row_rain[station] = rain_val.replace("TR", "0.0")
+                station = match[0]
+                row_max[station] = numbers[0].replace("TR", "0.0")
+                row_min[station] = numbers[1].replace("TR", "0.0")
+                row_rain[station] = numbers[2].replace("TR", "0.0")
                 found = True
 
             if unmatched_debug:
@@ -96,12 +95,12 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
             if found:
                 new_rows.extend([row_max, row_min, row_rain])
-                print(f"✅ Added: {actual_date} ({len(row_max)-2} stations)")
+                print(f"✅ Added: {actual_date}")
             else:
-                print(f"⚠️ {file}: nothing matched")
+                print(f"⚠️ {file}: no valid stations matched.")
 
         except Exception as e:
-            print(f"❌ Error: {e}")
+            print(f"❌ Error processing {file}: {e}")
 
 if new_rows:
     df = pd.DataFrame(new_rows)
@@ -109,4 +108,4 @@ if new_rows:
     summary_df.to_csv(summary_file, index=False)
     print(f"✅ Final summary saved: {summary_file} ({len(summary_df)} rows)")
 else:
-    print("⚠️ Nothing new")
+    print("⚠️ No new valid data found.")
