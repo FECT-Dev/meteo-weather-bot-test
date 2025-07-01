@@ -10,11 +10,11 @@ reports_folder = "reports"
 summary_file = "weather_summary.csv"
 
 known_stations = [
-    "Anuradhapura", "Badulla", "Bandarawela", "Batticaloa", "Colombo", "Galle",
-    "Hambanthota", "Jaffna", "Monaragala", "Katugasthota", "Katunayake", "Kurunagala",
-    "Maha Illuppallama", "Mannar", "Polonnaruwa", "Nuwara Eliya", "Pothuvil",
-    "Puttalam", "Rathmalana", "Rathnapura", "Trincomalee", "Vavuniya", "Mattala",
-    "Mullaitivu"
+   "Anuradhapura", "Badulla", "Bandarawela", "Batticaloa", "Colombo", "Galle",
+   "Hambanthota", "Jaffna", "Monaragala", "Katugasthota", "Katunayake", "Kurunagala",
+   "Maha Illuppallama", "Mannar", "Polonnaruwa", "Nuwara Eliya", "Pothuvil",
+   "Puttalam", "Rathmalana", "Rathnapura", "Trincomalee", "Vavuniya", "Mattala",
+   "Mullaitivu"
 ]
 
 def clean_image(img):
@@ -28,8 +28,6 @@ else:
 
 new_rows = []
 
-line_pattern = re.compile(r"^(.+?)\s+(TR|\d{1,3}(\.\d+)?)\s+(TR|\d{1,3}(\.\d+)?)\s+(TR|\d{1,3}(\.\d+)?)$")
-
 for date_folder in sorted(os.listdir(reports_folder)):
     folder_path = os.path.join(reports_folder, date_folder)
     if not os.path.isdir(folder_path):
@@ -40,7 +38,6 @@ for date_folder in sorted(os.listdir(reports_folder)):
             continue
 
         pdf_path = os.path.join(folder_path, file)
-
         try:
             images = convert_from_path(pdf_path, dpi=300)
             text = "\n".join(
@@ -69,30 +66,29 @@ for date_folder in sorted(os.listdir(reports_folder)):
             row_max = {"Date": actual_date, "Type": "Max"}
             row_min = {"Date": actual_date, "Type": "Min"}
             row_rain = {"Date": actual_date, "Type": "Rainfall"}
-            found = False
+
             unmatched = []
+            found = False
 
             for line in text.splitlines():
-                m = line_pattern.match(line.strip())
-                if not m:
+                numbers = re.findall(r"(TR|\d{1,3}(?:\.\d+)?)", line)
+                if len(numbers) != 3:
                     continue
 
-                station_raw = m.group(1).strip()
-                max_val, min_val, rain_val = m.group(2), m.group(4), m.group(6)
-
-                if not all(re.fullmatch(r"(TR|\d{1,3}(\.\d+)?)", v) for v in [max_val, min_val, rain_val]):
-                    unmatched.append(line)
-                    continue
+                station_part = line
+                for num in numbers:
+                    station_part = station_part.replace(num, "")
+                station_raw = station_part.strip()
 
                 match = get_close_matches(station_raw.title(), known_stations, n=1, cutoff=0.85)
-                if not match:
-                    unmatched.append(line)
+                if not match or len(station_raw) < 4:
+                    unmatched.append(f"{station_raw} | {numbers} | {line}")
                     continue
 
                 station = match[0]
-                row_max[station] = max_val.replace("TR", "0.0")
-                row_min[station] = min_val.replace("TR", "0.0")
-                row_rain[station] = rain_val.replace("TR", "0.0")
+                row_max[station] = numbers[0].replace("TR", "0.0")
+                row_min[station] = numbers[1].replace("TR", "0.0")
+                row_rain[station] = numbers[2].replace("TR", "0.0")
                 found = True
 
             if unmatched:
@@ -109,6 +105,6 @@ if new_rows:
     df = pd.DataFrame(new_rows)
     summary_df = pd.concat([summary_df, df], ignore_index=True)
     summary_df.to_csv(summary_file, index=False)
-    print(f"✅ Saved: {summary_file}")
+    print(f"✅ Final saved {summary_file}")
 else:
-    print("⚠️ No valid data.")
+    print("⚠️ No new valid data.")
