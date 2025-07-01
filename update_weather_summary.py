@@ -24,11 +24,7 @@ def clean_image(img):
     return img.point(lambda x: 0 if x < 160 else 255, "1")
 
 # === Load Existing Summary ===
-if os.path.exists(summary_file):
-    summary_df = pd.read_csv(summary_file)
-else:
-    summary_df = pd.DataFrame()
-
+summary_df = pd.read_csv(summary_file) if os.path.exists(summary_file) else pd.DataFrame()
 new_rows = []
 
 # === Regex Pattern ===
@@ -100,36 +96,44 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 min_val = match.group(4)
                 rain_val = match.group(6)
 
-                matches = get_close_matches(station_raw.title(), known_stations, n=1, cutoff=0.7)
-                if not matches:
+                # 🔑 Fuzzy match with stricter cutoff to avoid junk
+                matches = get_close_matches(
+                    station_raw.title(), known_stations, n=1, cutoff=0.80
+                )
+                if not matches or len(station_raw) < 4:
                     unmatched_lines.append(line)
                     continue
 
                 station = matches[0]
+
+                # ✅ Validate numbers again
+                if not all(re.fullmatch(r"TR|\d{1,3}(\.\d+)?", v) for v in [max_val, min_val, rain_val]):
+                    unmatched_lines.append(line)
+                    continue
+
                 row_max[station] = max_val.replace("TR", "0.0")
                 row_min[station] = min_val.replace("TR", "0.0")
                 row_rain[station] = rain_val.replace("TR", "0.0")
                 found = True
 
-            # Save unmatched lines for debugging
             if unmatched_lines:
                 with open(os.path.join(folder_path, "ocr_unmatched_lines.txt"), "w", encoding="utf-8") as f:
                     f.write("\n".join(unmatched_lines))
 
             if found:
                 new_rows.extend([row_max, row_min, row_rain])
-                print(f"✅ Added data for {actual_date} with {len(row_max)-2} stations.")
+                print(f"✅ Added {len(row_max)-2} stations for {actual_date}")
             else:
-                print(f"⚠️ No valid stations matched for {file}.")
+                print(f"⚠️ No valid station rows in {file}")
 
         except Exception as e:
-            print(f"❌ Error processing {file}: {e}")
+            print(f"❌ Error: {e}")
 
 # === Save Final CSV ===
 if new_rows:
     df = pd.DataFrame(new_rows)
     summary_df = pd.concat([summary_df, df], ignore_index=True)
     summary_df.to_csv(summary_file, index=False)
-    print(f"✅ Final summary saved: {summary_file} ({len(summary_df)} rows)")
+    print(f"✅ Final saved: {summary_file} ({len(summary_df)} rows)")
 else:
     print("⚠️ No new valid data found.")
