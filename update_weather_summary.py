@@ -16,17 +16,17 @@ known_stations = [
 ]
 
 def safe_number(v):
-    """Fix common OCR weirdness."""
+    """Fix common weird OCR characters."""
     v = str(v).upper().replace("O", "0").replace("|", "1").replace("I", "1").replace("l", "1")
     if "TR" in v: return "0.0"
     try: return str(float(v))
     except: return "0.0"
 
-# === Load summary ===
+# === LOAD existing summary ===
 summary_df = pd.read_csv(summary_file) if os.path.exists(summary_file) else pd.DataFrame()
 new_rows = []
 
-# === Process each folder ===
+# === PROCESS each PDF ===
 for date_folder in sorted(os.listdir(reports_folder)):
     folder_path = os.path.join(reports_folder, date_folder)
     if not os.path.isdir(folder_path): continue
@@ -35,69 +35,73 @@ for date_folder in sorted(os.listdir(reports_folder)):
         if not file.lower().endswith(".pdf"): continue
 
         pdf_path = os.path.join(folder_path, file)
-
         try:
             # === Use folder name as date ===
-            actual_date = date_folder
+            actual_date = date_folder.strip()
             if not re.match(r"\d{4}-\d{2}-\d{2}", actual_date):
-                print(f"⚠️ Skipping {file}: invalid folder date {actual_date}")
+                print(f"⚠️ Skipping {file}: folder name not valid date.")
                 continue
 
             if not summary_df.empty and (summary_df["Date"] == actual_date).any():
-                print(f"ℹ️ Skipping {actual_date} — already in CSV.")
+                print(f"ℹ️ Skipping {actual_date} — already processed.")
                 continue
 
-            # === Extract tables ===
+            # === Read table with Camelot ===
             tables = camelot.read_pdf(pdf_path, pages="1", flavor="stream")
             if not tables:
-                print(f"⚠️ {file}: No tables found.")
+                print(f"⚠️ {file}: No table found.")
                 continue
 
             df = tables[0].df
-            # Remove extra header rows if needed
+            # Try to fix possible duplicated headers
             df.columns = ["Station", "Max", "Min", "Rainfall"]
-            df = df.drop(0, errors="ignore")
+            if df.iloc[0].str.contains("Station").any():
+                df = df.drop(0)  # Drop header row inside PDF table
 
-            # === Debug save raw table ===
+            # Save raw debug for inspection
             df.to_csv(os.path.join(folder_path, "camelot_table_debug.csv"), index=False)
 
             row_max = {"Date": actual_date, "Type": "Max"}
             row_min = {"Date": actual_date, "Type": "Min"}
             row_rain = {"Date": actual_date, "Type": "Rainfall"}
+            found_any = False
             unmatched = []
-            found = False
 
             for _, row in df.iterrows():
-                station_raw = str(row["Station"]).strip()
-                if not station_raw or len(station_raw) < 3:
+                station_raw = str(row["Station"]).strip().title()
+                if len(station_raw) < 3:
                     continue
 
-                # Fuzzy match: more forgiving match
-                match = [s for s in known_stations if s.lower() in station_raw.lower()]
-                if not match:
+                # Try strict match first
+                matches = [s for s in known_stations if s.lower() == station_raw.lower()]
+                if not matches:
+                    # Fallback: partial contains
+                    matches = [s for s in known_stations if s.lower() in station_raw.lower()]
+
+                if not matches:
                     unmatched.append(f"{station_raw} | {row['Max']} | {row['Min']} | {row['Rainfall']}")
                     continue
 
-                station = match[0]
+                station = matches[0]
                 row_max[station] = safe_number(row["Max"])
                 row_min[station] = safe_number(row["Min"])
                 row_rain[station] = safe_number(row["Rainfall"])
-                found = True
+                found_any = True
 
             if unmatched:
                 with open(os.path.join(folder_path, "unmatched_stations_debug.txt"), "w") as f:
                     f.write("\n".join(unmatched))
 
-            if found:
+            if found_any:
                 new_rows.extend([row_max, row_min, row_rain])
-                print(f"✅ Added {actual_date} — {len(row_max)-2} stations")
+                print(f"✅ {actual_date}: {len(row_max)-2} stations matched.")
             else:
-                print(f"⚠️ {file}: No valid stations matched.")
+                print(f"⚠️ {file}: No valid stations found.")
 
         except Exception as e:
-            print(f"❌ {file} — {e}")
+            print(f"❌ {file}: {e}")
 
-# === Save final summary ===
+# === SAVE FINAL ===
 if new_rows:
     df = pd.DataFrame(new_rows)
     summary_df = pd.concat([summary_df, df], ignore_index=True)
