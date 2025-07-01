@@ -6,7 +6,7 @@ import pytesseract
 from PIL import Image
 from difflib import get_close_matches
 
-# === SETTINGS ===
+# === CONFIG ===
 reports_folder = "reports"
 summary_file = "weather_summary.csv"
 
@@ -23,21 +23,24 @@ def clean_image(img):
 
 def safe_number(v):
     v = v.upper().replace("O", "0").replace("|", "1").replace("I", "1").replace("l", "1")
-    if v == "TR": return "0.0"
-    try: return str(float(v))
-    except: return "0.0"
+    if v.strip() in ["", "-", "—"]: return "0.0"
+    if "TR" in v: return "0.0"
+    try:
+        return str(float(v))
+    except:
+        return "0.0"
 
-# === LOAD EXISTING ===
+# === Load existing ===
 summary_df = pd.read_csv(summary_file) if os.path.exists(summary_file) else pd.DataFrame()
 new_rows = []
 
+# === Process PDFs ===
 for date_folder in sorted(os.listdir(reports_folder)):
     folder_path = os.path.join(reports_folder, date_folder)
     if not os.path.isdir(folder_path): continue
 
     for file in os.listdir(folder_path):
         if not file.lower().endswith(".pdf"): continue
-
         pdf_path = os.path.join(folder_path, file)
 
         try:
@@ -47,16 +50,17 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 for img in images
             )
 
-            with open(os.path.join(folder_path, "ocr_debug_output.txt"), "w") as f:
+            # Save raw OCR
+            with open(os.path.join(folder_path, "ocr_debug_output.txt"), "w", encoding="utf-8") as f:
                 f.write(text)
 
-            # === DATE: Only from trusted line ===
+            # === Extract date ===
             actual_date = None
             for line in text.splitlines():
                 if "0830" in line and "period" in line.lower():
                     m = re.search(r"(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})", line)
                     if m:
-                        y,mth,d = map(int, m.groups())
+                        y, mth, d = map(int, m.groups())
                         actual_date = f"{y:04d}-{mth:02d}-{d:02d}"
                         break
             if not actual_date:
@@ -64,12 +68,13 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 continue
 
             if not summary_df.empty and (summary_df["Date"] == actual_date).any():
-                print(f"ℹ️ {actual_date} already exists.")
+                print(f"ℹ️ Skipping {actual_date} (already in CSV).")
                 continue
 
             row_max = {"Date": actual_date, "Type": "Max"}
             row_min = {"Date": actual_date, "Type": "Min"}
             row_rain = {"Date": actual_date, "Type": "Rainfall"}
+
             unmatched = []
             found = False
 
@@ -78,15 +83,20 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 numbers = [n[0] if isinstance(n, tuple) else n for n in numbers]
                 if len(numbers) != 3: continue
 
-                station_guess = line
-                for num in numbers: station_guess = station_guess.replace(num, "")
-                station_guess = station_guess.strip()
+                guess_line = line
+                for num in numbers:
+                    guess_line = guess_line.replace(num, "")
+                guess_line = guess_line.strip()
 
-                # ✅ Get last word only
-                parts = station_guess.split()
-                station_part = parts[-1] if parts else station_guess
+                # Try last word first
+                parts = guess_line.split()
+                station_part = parts[-1] if parts else guess_line
 
                 match = get_close_matches(station_part.title(), known_stations, n=1, cutoff=0.7)
+                if not match:
+                    # Fallback: try full guess
+                    match = get_close_matches(guess_line.title(), known_stations, n=1, cutoff=0.7)
+
                 if not match:
                     unmatched.append(f"{station_part} | {numbers} | {line}")
                     continue
@@ -105,16 +115,16 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 new_rows.extend([row_max, row_min, row_rain])
                 print(f"✅ Added {actual_date} — {len(row_max)-2} stations")
             else:
-                print(f"⚠️ {file}: No valid stations.")
+                print(f"⚠️ {file}: No valid station lines found.")
 
         except Exception as e:
-            print(f"❌ Error {file}: {e}")
+            print(f"❌ {file}: {e}")
 
-# === SAVE FINAL ===
+# === Save ===
 if new_rows:
     df = pd.DataFrame(new_rows)
     summary_df = pd.concat([summary_df, df], ignore_index=True)
     summary_df.to_csv(summary_file, index=False)
-    print(f"✅ Saved summary: {summary_file} ({len(summary_df)} rows)")
+    print(f"✅ Saved: {summary_file} — Total rows: {len(summary_df)}")
 else:
-    print("⚠️ No new valid data.")
+    print("⚠️ No new valid rows.")
