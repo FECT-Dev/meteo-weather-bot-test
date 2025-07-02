@@ -16,12 +16,16 @@ known_stations = [
     "Mullaitivu"
 ]
 
+# === HELPERS ===
 def safe_number(v):
     v = str(v).upper().replace("O", "0").replace("|", "1").replace("I", "1").replace("l", "1")
     v = re.sub(r"[^\d.]", "", v)
-    if "TR" in v or not v: return "0.0"
-    try: return str(float(v))
-    except: return "0.0"
+    if "TR" in v or not v:
+        return "0.0"
+    try:
+        return str(float(v))
+    except:
+        return "0.0"
 
 def fuzzy_match(station_raw):
     matches = get_close_matches(station_raw, known_stations, n=1, cutoff=0.6)
@@ -70,34 +74,44 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 if df.iloc[0].str.contains("Station").any():
                     df = df.drop(0)
 
+                # Debug: save each table if needed
+                # debug_table_path = os.path.join(folder_path, f"debug_table_{tables.index(table)}.csv")
+                # df.to_csv(debug_table_path, index=False)
+
                 if df.shape[1] >= 3:
                     df.columns = ["Station", "Max", "Min", "Rainfall"][:df.shape[1]]
-                    for _, row in df.iterrows():
-                        station_raw = str(row["Station"]).replace("\n", " ").strip().title()
-                        if len(station_raw) < 3:
-                            continue
-                        station = fuzzy_match(station_raw)
-                        if not station:
-                            continue
+                    table_type = "Temperature"
+                elif df.shape[1] == 2:
+                    df.columns = ["Station", "Rainfall"]
+                    table_type = "RainfallOnly"
+                else:
+                    continue
+
+                for _, row in df.iterrows():
+                    station_raw = str(row["Station"]).replace("\n", " ").strip().title()
+
+                    # === Filter bad rows ===
+                    if len(station_raw) < 3:
+                        continue
+                    if station_raw.lower() in ["stations", "station", "rainfall", "(mm)", "mm", "rainfall(mm)"]:
+                        continue
+
+                    station = fuzzy_match(station_raw)
+                    if not station:
+                        print(f"❌ UNMATCHED: {station_raw}")
+                        continue
+
+                    if table_type == "Temperature":
                         row_max[station] = safe_number(row["Max"])
                         row_min[station] = safe_number(row["Min"])
                         if "Rainfall" in row:
                             row_rain[station] = safe_number(row["Rainfall"])
-                        matched_stations.add(station)
-                elif df.shape[1] == 2:
-                    df.columns = ["Station", "Rainfall"]
-                    for _, row in df.iterrows():
-                        station_raw = str(row["Station"]).replace("\n", " ").strip().title()
-                        if len(station_raw) < 3:
-                            continue
-                        station = fuzzy_match(station_raw)
-                        if not station:
-                            continue
+                    elif table_type == "RainfallOnly":
                         row_rain[station] = safe_number(row["Rainfall"])
-                        matched_stations.add(station)
+
+                    matched_stations.add(station)
 
             if matched_stations:
-                # Ensure every station is present
                 for s in known_stations:
                     row_max.setdefault(s, "")
                     row_min.setdefault(s, "")
