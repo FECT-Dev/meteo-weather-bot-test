@@ -36,8 +36,8 @@ SKIP_WORDS = [
     "station", "stations", "rainfall", "(mm)", "mm", "rainfall(mm)",
     "rainfall (mm)", "mean", "temp", "temperature", "maximum", "minimum"
 ]
-# Build regex pattern for partial word match
-pattern = r"\b(" + "|".join(SKIP_WORDS) + r")\b"
+# Use broad pattern — no word boundaries
+pattern = r"(" + "|".join(SKIP_WORDS) + r")"
 
 # === LOAD EXISTING ===
 summary_df = pd.read_csv(summary_file) if os.path.exists(summary_file) else pd.DataFrame()
@@ -81,7 +81,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 if df.iloc[0].str.contains("Station").any():
                     df = df.drop(0)
 
-                # Optional: save raw table for debugging
+                # Optional debug: save raw table
                 debug_table_path = os.path.join(folder_path, f"debug_table_{idx}.csv")
                 df.to_csv(debug_table_path, index=False)
 
