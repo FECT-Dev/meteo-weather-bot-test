@@ -23,20 +23,15 @@ def safe_number(v, is_rainfall=False):
     v = str(v).upper().replace("O", "0").replace("|", "1").replace("I", "1").replace("l", "1").strip()
     v = re.sub(r"[^\d.]", "", v)
     if not v:
-        print(f"❌ Empty for: '{original}'")
         return ""
     try:
         f = float(v)
         if not is_rainfall and (f == 0.0 or f < -10 or f > 60):
-            print(f"❌ Invalid Max/Min: '{original}' ➜ {f}")
             return ""
-        print(f"✅ Parsed: '{original}' ➜ {f}")
         return str(f)
     except:
-        print(f"❌ Parse error: '{original}'")
         return ""
 
-# === MAIN LOOP ===
 new_rows = []
 
 for date_folder in sorted(os.listdir(reports_folder)):
@@ -55,6 +50,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
         print(f"⚠️ Skipping {date_folder}: PDF not found.")
         continue
 
+    # === Extract date from PDF ===
     with open(pdf_path, "rb") as f:
         reader = PyPDF2.PdfReader(f)
         page_text = reader.pages[0].extract_text()
@@ -68,50 +64,51 @@ for date_folder in sorted(os.listdir(reports_folder)):
     valid_max, valid_min, valid_rain = {}, {}, {}
 
     try:
+        # === Try Camelot ===
         tables = camelot.read_pdf(pdf_path, pages="1", flavor="stream")
-        print(f"🔍 Stream tables found: {len(tables)}")
+        print(f"🔍 Stream tables: {len(tables)}")
 
-        if not tables or len(tables) == 0:
-            print("⚠️ Trying flavor='lattice' instead...")
+        if len(tables) == 0:
+            print("⚠️ Trying lattice...")
             tables = camelot.read_pdf(pdf_path, pages="1", flavor="lattice")
-            print(f"🔍 Lattice tables found: {len(tables)}")
+            print(f"🔍 Lattice tables: {len(tables)}")
 
-        if not tables or len(tables) == 0:
-            print(f"⚠️ No tables found — trying OCR fallback...")
+        if len(tables) == 0:
+            # === OCR fallback ===
+            print("⚠️ Using OCR fallback...")
             images = convert_from_path(pdf_path, dpi=300)
-            text = pytesseract.image_to_string(images[0])
-            print("\n=== OCR EXTRACTED TEXT ===\n")
-            print(text[:1000])  # show first 1000 chars
+            text = pytesseract.image_to_string(images[0], config='--psm 6')
+            print(f"🔍 OCR text preview:\n{text[:500]}")
 
-            lines = text.split("\n")
-            for line in lines:
-                parts = re.split(r"\s+", line.strip())
-                matches = [part for part in parts if re.match(r"[A-Za-z]+", part)]
-                if not matches:
+            current_station = ""
+            for line in text.split("\n"):
+                line = line.strip()
+                if not line:
                     continue
-                english_station = matches[-1].title()
-                if english_station not in known_stations:
+                # If line has station
+                matches = re.findall(r"[A-Za-z]+", line)
+                if matches and len(matches[0]) > 2:
+                    current_station = matches[-1].title()
                     continue
-
+                # If line has numbers
                 nums = re.findall(r"\d+\.\d+", line)
-                if len(nums) >= 2:
-                    max_val = safe_number(nums[0], is_rainfall=False)
-                    min_val = safe_number(nums[1], is_rainfall=False)
-                    if max_val:
-                        valid_max[english_station] = max_val
-                    if min_val:
-                        valid_min[english_station] = min_val
-                if len(nums) >= 3:
-                    rain_val = safe_number(nums[2], is_rainfall=True)
-                    if rain_val:
-                        valid_rain[english_station] = rain_val
-
+                if current_station and nums:
+                    if current_station not in known_stations:
+                        current_station = ""
+                        continue
+                    if len(nums) >= 2:
+                        max_val = safe_number(nums[0])
+                        min_val = safe_number(nums[1])
+                        if max_val: valid_max[current_station] = max_val
+                        if min_val: valid_min[current_station] = min_val
+                    if len(nums) >= 3:
+                        rain_val = safe_number(nums[2], is_rainfall=True)
+                        if rain_val: valid_rain[current_station] = rain_val
+                    current_station = ""
         else:
             for idx, table in enumerate(tables):
                 df = table.df
-                print(f"\n=== TABLE {idx} RAW ===\n{df}\n")
                 df.to_csv(os.path.join(folder_path, f"debug_table_{idx}.csv"), index=False)
-
                 if df.shape[1] >= 3:
                     df.columns = ["Station", "Max", "Min", "Rainfall"][:df.shape[1]]
                     table_type = "Temperature"
@@ -121,14 +118,10 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 else:
                     continue
 
-                print(f"=== TABLE {idx} WITH HEADERS ===\n{df}\n")
-
                 for _, row in df.iterrows():
                     station_raw = str(row["Station"]).replace("\n", " ").strip()
                     matches = re.findall(r"[A-Za-z]+", station_raw)
                     english_station = matches[-1].title() if matches else ""
-
-                    print(f"🔍 Raw station: '{station_raw}' ➜ '{english_station}'")
 
                     if not english_station or english_station not in known_stations:
                         continue
@@ -137,33 +130,26 @@ for date_folder in sorted(os.listdir(reports_folder)):
                         max_val = safe_number(row["Max"], is_rainfall=False)
                         min_val = safe_number(row["Min"], is_rainfall=False)
                         rain_val = safe_number(row["Rainfall"], is_rainfall=True) if "Rainfall" in row else ""
-                        if max_val:
-                            valid_max[english_station] = max_val
-                        if min_val:
-                            valid_min[english_station] = min_val
-                        if rain_val:
-                            valid_rain[english_station] = rain_val
-
+                        if max_val: valid_max[english_station] = max_val
+                        if min_val: valid_min[english_station] = min_val
+                        if rain_val: valid_rain[english_station] = rain_val
                     elif table_type == "RainfallOnly":
                         rain_val = safe_number(row["Rainfall"], is_rainfall=True)
-                        if rain_val:
-                            valid_rain[english_station] = rain_val
+                        if rain_val: valid_rain[english_station] = rain_val
 
-        # ✅ Always save 3 rows per date
+        # === Always save 3 rows ===
         row_max = {"Date": actual_date, "Type": "Max"}
         row_min = {"Date": actual_date, "Type": "Min"}
         row_rain = {"Date": actual_date, "Type": "Rainfall"}
-
         row_max.update(valid_max)
         row_min.update(valid_min)
         row_rain.update(valid_rain)
-
         new_rows.extend([row_max, row_min, row_rain])
-        print(f"✅ {actual_date}: Added Max, Min, Rainfall rows.")
-        print(f"✅ Stations with data: Max={len(valid_max)}, Min={len(valid_min)}, Rainfall={len(valid_rain)}")
+
+        print(f"✅ {actual_date}: Max={len(valid_max)}, Min={len(valid_min)}, Rainfall={len(valid_rain)}")
 
     except Exception as e:
-        print(f"❌ Error processing {expected_pdf}: {e}")
+        print(f"❌ Error: {e}")
 
 # === FINAL SAVE ===
 if new_rows:
