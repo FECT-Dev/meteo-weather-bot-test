@@ -84,7 +84,6 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
                 for _, row in df.iterrows():
                     station_raw = str(row["Station"]).replace("\n", " ").strip()
-                    # ✅ Extract only English word from mixed Sinhala/English
                     matches = re.findall(r"[A-Za-z]+", station_raw)
                     english_station = matches[-1].title() if matches else ""
 
@@ -113,23 +112,20 @@ for date_folder in sorted(os.listdir(reports_folder)):
                         if rain_val:
                             valid_rain[english_station] = rain_val
 
-            if valid_max:
-                row_max = {"Date": actual_date, "Type": "Max"}
-                row_max.update(valid_max)
-                new_rows.append(row_max)
-            if valid_min:
-                row_min = {"Date": actual_date, "Type": "Min"}
-                row_min.update(valid_min)
-                new_rows.append(row_min)
-            if valid_rain:
-                row_rain = {"Date": actual_date, "Type": "Rainfall"}
-                row_rain.update(valid_rain)
-                new_rows.append(row_rain)
+            # ✅ ALWAYS save 3 rows per date
+            row_max = {"Date": actual_date, "Type": "Max"}
+            row_min = {"Date": actual_date, "Type": "Min"}
+            row_rain = {"Date": actual_date, "Type": "Rainfall"}
 
-            if valid_max or valid_min or valid_rain:
-                print(f"✅ {actual_date}: Valid rows saved.")
-            else:
-                print(f"⚠️ {file}: No valid data — skipped.")
+            row_max.update(valid_max)
+            row_min.update(valid_min)
+            row_rain.update(valid_rain)
+
+            new_rows.append(row_max)
+            new_rows.append(row_min)
+            new_rows.append(row_rain)
+
+            print(f"✅ {actual_date}: Added Max, Min, Rainfall rows.")
 
         except Exception as e:
             print(f"❌ Error processing {file}: {e}")
@@ -148,8 +144,6 @@ if new_rows:
 
     final_df = pd.DataFrame(cleaned_rows)
     final_df = final_df.reindex(columns=["Date", "Type"] + known_stations)
-    final_df = final_df.dropna(how="all", subset=known_stations)
-
     final_df.to_csv(summary_file, index=False)
     print(f"✅ Overwrote clean: {summary_file} — {len(final_df)} rows")
 else:
