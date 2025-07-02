@@ -23,12 +23,15 @@ def safe_number(v):
     if "TR" in v or not v:
         return ""
     try:
-        return str(float(v))
+        f = float(v)
+        if f > 50 or f < -10:  # unreasonable temp or rainfall
+            return ""
+        return str(f)
     except:
         return ""
 
 def fuzzy_match(station_raw):
-    matches = get_close_matches(station_raw, known_stations, n=1, cutoff=0.6)
+    matches = get_close_matches(station_raw, known_stations, n=1, cutoff=0.75)
     return matches[0] if matches else None
 
 # === HEADERS/JUNK WORDS ===
@@ -105,33 +108,36 @@ for date_folder in sorted(os.listdir(reports_folder)):
                         print(f"⛔ SKIPPED HEADER: '{station_raw}'")
                         continue
 
-                    # === NEW: validate that numeric data is real ===
-                    valid_row = False
-                    if table_type == "Temperature":
-                        if safe_number(row["Max"]) and safe_number(row["Min"]):
-                            valid_row = True
-                    elif table_type == "RainfallOnly":
-                        if safe_number(row["Rainfall"]):
-                            valid_row = True
-
-                    if not valid_row:
-                        print(f"⛔ SKIPPED NON-NUMERIC: '{station_raw}'")
-                        continue
-
                     station = fuzzy_match(station_raw)
                     if not station:
                         print(f"❌ UNMATCHED: '{station_raw}'")
                         continue
 
-                    if table_type == "Temperature":
-                        row_max[station] = safe_number(row["Max"])
-                        row_min[station] = safe_number(row["Min"])
-                        if "Rainfall" in row:
-                            row_rain[station] = safe_number(row["Rainfall"])
-                    elif table_type == "RainfallOnly":
-                        row_rain[station] = safe_number(row["Rainfall"])
+                    valid = False
 
-                    matched_stations.add(station)
+                    if table_type == "Temperature":
+                        max_val = safe_number(row["Max"])
+                        min_val = safe_number(row["Min"])
+                        if max_val and min_val:
+                            row_max[station] = max_val
+                            row_min[station] = min_val
+                            valid = True
+                        if "Rainfall" in row:
+                            rain_val = safe_number(row["Rainfall"])
+                            if rain_val:
+                                row_rain[station] = rain_val
+                                valid = True
+                    elif table_type == "RainfallOnly":
+                        rain_val = safe_number(row["Rainfall"])
+                        if rain_val:
+                            row_rain[station] = rain_val
+                            valid = True
+
+                    if valid:
+                        matched_stations.add(station)
+                        print(f"✅ SAVED: {station} | Max:{row_max.get(station,'')} Min:{row_min.get(station,'')} Rain:{row_rain.get(station,'')}")
+                    else:
+                        print(f"⛔ SKIPPED NO VALID NUMBERS: '{station_raw}' -> {station}")
 
             if matched_stations:
                 for s in known_stations:
