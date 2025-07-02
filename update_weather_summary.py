@@ -64,8 +64,6 @@ for date_folder in sorted(os.listdir(reports_folder)):
             row_min = {"Date": actual_date, "Type": "Min"}
             row_rain = {"Date": actual_date, "Type": "Rainfall"}
 
-            matched_stations = set()
-
             for idx, table in enumerate(tables):
                 df = table.df
 
@@ -97,14 +95,12 @@ for date_folder in sorted(os.listdir(reports_folder)):
                         print(f"⛔ SKIPPED HEADER: '{station_raw}'")
                         continue
 
-                    # ✅ Exact match only
                     matches = [s for s in known_stations if s.lower() == station_raw.lower()]
                     if not matches:
                         print(f"❌ NO EXACT MATCH: '{station_raw}'")
                         continue
 
                     station = matches[0]
-                    valid = False
 
                     if table_type == "Temperature":
                         max_val = safe_number(row["Max"])
@@ -112,36 +108,37 @@ for date_folder in sorted(os.listdir(reports_folder)):
                         if max_val and min_val:
                             row_max[station] = max_val
                             row_min[station] = min_val
-                            valid = True
                         if "Rainfall" in row:
                             rain_val = safe_number(row["Rainfall"])
                             if rain_val:
                                 row_rain[station] = rain_val
-                                valid = True
 
                     elif table_type == "RainfallOnly":
                         rain_val = safe_number(row["Rainfall"])
                         if rain_val:
                             row_rain[station] = rain_val
-                            valid = True
 
-                    if valid:
-                        matched_stations.add(station)
-                        print(f"✅ SAVED: {station}")
-                    else:
-                        print(f"⛔ SKIPPED: No valid numbers for {station}")
+            # ✅ FINAL GUARD — only keep rows with real station data
+            max_valid = any(row_max.get(s) for s in known_stations)
+            min_valid = any(row_min.get(s) for s in known_stations)
+            rain_valid = any(row_rain.get(s) for s in known_stations)
 
-            # ✅ FINAL GUARD: skip empty rows!
-            if matched_stations:
-                new_rows.extend([row_max, row_min, row_rain])
-                print(f"✅ {actual_date}: {len(matched_stations)} stations matched.")
+            if max_valid:
+                new_rows.append(row_max)
+            if min_valid:
+                new_rows.append(row_min)
+            if rain_valid:
+                new_rows.append(row_rain)
+
+            if max_valid or min_valid or rain_valid:
+                print(f"✅ {actual_date}: Row(s) with valid data saved.")
             else:
-                print(f"⚠️ {file}: No stations matched — skipped empty rows.")
+                print(f"⚠️ {file}: No valid data — skipped.")
 
         except Exception as e:
             print(f"❌ Error processing {file}: {e}")
 
-# === FINAL SAVE — CLEANED ROWS ONLY ===
+# === FINAL SAVE — CLEANED ONLY ===
 if new_rows:
     cleaned_rows = []
 
@@ -159,7 +156,6 @@ if new_rows:
     # ✅ Bulletproof: reindex final columns
     final_df = final_df.reindex(columns=["Date", "Type"] + known_stations)
 
-    # ✅ Overwrite: no merge, no junk
     final_df.to_csv(summary_file, index=False)
     print(f"✅ Overwrote clean: {summary_file} — {len(final_df)} rows")
 else:
