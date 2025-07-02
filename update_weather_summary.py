@@ -15,6 +15,7 @@ known_stations = [
     "Mullaitivu"
 ]
 
+# === HELPERS ===
 def safe_number(v):
     v = str(v).upper().replace("O", "0").replace("|", "1").replace("I", "1").replace("l", "1")
     v = re.sub(r"[^\d.]", "", v)
@@ -22,18 +23,20 @@ def safe_number(v):
         return ""
     try:
         f = float(v)
-        if f < -10 or f > 60:
+        if f < -10 or f > 60:  # reasonable for SL
             return ""
         return str(f)
     except:
         return ""
 
+# === HEADERS/JUNK WORDS ===
 SKIP_WORDS = [
     "station", "stations", "rainfall", "(mm)", "mm", "rainfall(mm)",
     "rainfall (mm)", "mean", "temp", "temperature", "maximum", "minimum"
 ]
 pattern = r"(" + "|".join(SKIP_WORDS) + r")"
 
+# === MAIN LOOP ===
 new_rows = []
 
 for date_folder in sorted(os.listdir(reports_folder)):
@@ -54,6 +57,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
         try:
             tables = camelot.read_pdf(pdf_path, pages="1", flavor="stream")
             if not tables:
+                print(f"⚠️ {file}: No table found.")
                 continue
 
             row_max = {"Date": actual_date, "Type": "Max"}
@@ -68,6 +72,9 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 if df.iloc[0].str.contains("Station").any():
                     df = df.drop(0)
 
+                debug_table_path = os.path.join(folder_path, f"debug_table_{idx}.csv")
+                df.to_csv(debug_table_path, index=False)
+
                 if df.shape[1] >= 3:
                     df.columns = ["Station", "Max", "Min", "Rainfall"][:df.shape[1]]
                     table_type = "Temperature"
@@ -81,11 +88,19 @@ for date_folder in sorted(os.listdir(reports_folder)):
                     station_raw = str(row["Station"]).replace("\n", " ").strip().title()
                     station_raw = re.sub(r"\s+", " ", station_raw)
 
-                    if len(station_raw) < 3 or re.search(pattern, station_raw.lower()):
+                    print(f"🔍 RAW STATION: '{station_raw}'")
+
+                    if len(station_raw) < 3:
                         continue
 
+                    if re.search(pattern, station_raw.lower()):
+                        print(f"⛔ SKIPPED HEADER: '{station_raw}'")
+                        continue
+
+                    # ✅ Exact match only
                     matches = [s for s in known_stations if s.lower() == station_raw.lower()]
                     if not matches:
+                        print(f"❌ NO EXACT MATCH: '{station_raw}'")
                         continue
 
                     station = matches[0]
@@ -112,14 +127,20 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
                     if valid:
                         matched_stations.add(station)
+                        print(f"✅ SAVED: {station}")
+                    else:
+                        print(f"⛔ SKIPPED: No valid numbers for {station}")
 
             if matched_stations:
                 new_rows.extend([row_max, row_min, row_rain])
+                print(f"✅ {actual_date}: {len(matched_stations)} stations matched.")
+            else:
+                print(f"⚠️ {file}: No stations matched.")
 
         except Exception as e:
-            print(f"❌ Error: {e}")
+            print(f"❌ Error processing {file}: {e}")
 
-# === FINAL: WRITE FRESH ONLY ===
+# === FINAL SAVE — REBUILD, LOCKED COLUMNS, OVERWRITE ===
 if new_rows:
     cleaned_rows = []
     for row in new_rows:
@@ -132,10 +153,12 @@ if new_rows:
         cleaned_rows.append(clean)
 
     final_df = pd.DataFrame(cleaned_rows)
-    final_df = final_df[["Date", "Type"] + known_stations]]
 
-    # ✅ Completely overwrite — don’t read any old junk
+    # ✅ NO EXTRA BRACKET — fully locked
+    final_df = final_df[["Date", "Type"] + known_stations]
+
+    # ✅ Overwrite the CSV — no merge, no junk
     final_df.to_csv(summary_file, index=False)
-    print(f"✅ Overwrote clean: {summary_file}")
+    print(f"✅ Overwrote clean: {summary_file} — {len(final_df)} rows")
 else:
     print("⚠️ No new data added.")
