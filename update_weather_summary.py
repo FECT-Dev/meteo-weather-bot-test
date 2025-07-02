@@ -23,7 +23,7 @@ def safe_number(v):
         return ""
     try:
         f = float(v)
-        if f < -10 or f > 60:  # reasonable for Sri Lanka temps/rainfall
+        if f < -10 or f > 60:  # reasonable range for temps/rainfall
             return ""
         return str(f)
     except:
@@ -36,11 +36,9 @@ SKIP_WORDS = [
 ]
 pattern = r"(" + "|".join(SKIP_WORDS) + r")"
 
-# === LOAD EXISTING ===
-summary_df = pd.read_csv(summary_file) if os.path.exists(summary_file) else pd.DataFrame()
+# === MAIN LOOP ===
 new_rows = []
 
-# === MAIN LOOP ===
 for date_folder in sorted(os.listdir(reports_folder)):
     folder_path = os.path.join(reports_folder, date_folder)
     if not os.path.isdir(folder_path):
@@ -54,10 +52,6 @@ for date_folder in sorted(os.listdir(reports_folder)):
         actual_date = date_folder.strip()
         if not re.match(r"\d{4}-\d{2}-\d{2}", actual_date):
             print(f"⚠️ Skipping {file}: folder name not valid date: {actual_date}")
-            continue
-
-        if not summary_df.empty and (summary_df["Date"] == actual_date).any():
-            print(f"ℹ️ Skipping {actual_date} — already processed.")
             continue
 
         try:
@@ -146,7 +140,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
         except Exception as e:
             print(f"❌ Error processing {file}: {e}")
 
-# === FINAL SAVE — LOCKED COLUMNS NEW + OLD ===
+# === FINAL SAVE — OVERWRITE WITH LOCKED COLUMNS ===
 if new_rows:
     cleaned_rows = []
     for row in new_rows:
@@ -159,14 +153,10 @@ if new_rows:
         cleaned_rows.append(cleaned)
 
     final_df = pd.DataFrame(cleaned_rows)
-    final_df = final_df[["Date", "Type"] + known_stations]
+    final_df = final_df[["Date", "Type"] + known_stations]]
 
-    # ✅ Re-filter old rows too, to drop any junk columns!
-    if not summary_df.empty:
-        summary_df = summary_df[["Date", "Type"] + known_stations]
-
-    summary_df = pd.concat([summary_df, final_df], ignore_index=True)
-    summary_df.to_csv(summary_file, index=False)
-    print(f"✅ Saved: {summary_file} — Total rows: {len(summary_df)}")
+    # ✅ 🚫 Do NOT merge with old CSV — overwrite it!
+    final_df.to_csv(summary_file, index=False)
+    print(f"✅ Saved fresh: {summary_file} — Rows: {len(final_df)}")
 else:
     print("⚠️ No new data added.")
