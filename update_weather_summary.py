@@ -19,11 +19,11 @@ known_stations = [
 def safe_number(v):
     v = str(v).upper().replace("O", "0").replace("|", "1").replace("I", "1").replace("l", "1")
     v = re.sub(r"[^\d.]", "", v)
-    if "TR" in v or not v:
+    if not v:
         return ""
     try:
         f = float(v)
-        if f > 50 or f < -10:
+        if f < -10 or f > 60:  # unlikely for Sri Lanka
             return ""
         return str(f)
     except:
@@ -103,14 +103,13 @@ for date_folder in sorted(os.listdir(reports_folder)):
                         print(f"⛔ SKIPPED HEADER: '{station_raw}'")
                         continue
 
-                    # Exact match only
+                    # ✅ Exact match only: never fuzzy
                     matches = [s for s in known_stations if s.lower() == station_raw.lower()]
                     if not matches:
                         print(f"❌ NO EXACT MATCH: '{station_raw}'")
                         continue
 
                     station = matches[0]
-
                     valid = False
 
                     if table_type == "Temperature":
@@ -135,7 +134,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
                         matched_stations.add(station)
                         print(f"✅ SAVED: {station}")
                     else:
-                        print(f"⛔ SKIPPED NO VALID NUMBERS: '{station_raw}' -> {station}")
+                        print(f"⛔ SKIPPED: No valid numbers for {station}")
 
             if matched_stations:
                 for s in known_stations:
@@ -150,11 +149,14 @@ for date_folder in sorted(os.listdir(reports_folder)):
         except Exception as e:
             print(f"❌ Error processing {file}: {e}")
 
-# === SAVE ===
+# === SAVE — LOCK COLUMNS ===
 if new_rows:
     final_df = pd.DataFrame(new_rows)
+
+    # ✅ Lock to your trusted columns
     columns_order = ["Date", "Type"] + known_stations
     final_df = final_df[columns_order]
+
     summary_df = pd.concat([summary_df, final_df], ignore_index=True)
     summary_df.to_csv(summary_file, index=False)
     print(f"✅ Saved: {summary_file} — Total rows: {len(summary_df)}")
