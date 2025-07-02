@@ -140,9 +140,10 @@ for date_folder in sorted(os.listdir(reports_folder)):
         except Exception as e:
             print(f"❌ Error processing {file}: {e}")
 
-# === FINAL SAVE — CLEAN BUILD & REINDEX ===
+# === FINAL SAVE — USE ONLY CLEANED ROWS, LOCKED COLUMNS ===
 if new_rows:
     cleaned_rows = []
+
     for row in new_rows:
         clean = {
             "Date": row["Date"],
@@ -152,11 +153,13 @@ if new_rows:
             clean[s] = row.get(s, "")
         cleaned_rows.append(clean)
 
+    # ✅ Build DataFrame ONLY from cleaned_rows!
     final_df = pd.DataFrame(cleaned_rows)
 
-    # ✅ Final bulletproof step: reindex drops any stray keys
+    # ✅ Final bulletproof: reindex drops stray keys
     final_df = final_df.reindex(columns=["Date", "Type"] + known_stations)
 
+    # ✅ Overwrite file — no merge, no leftover junk
     final_df.to_csv(summary_file, index=False)
     print(f"✅ Overwrote clean: {summary_file} — {len(final_df)} rows")
 else:
