@@ -21,11 +21,11 @@ def safe_number(v):
     v = str(v).upper().replace("O", "0").replace("|", "1").replace("I", "1").replace("l", "1")
     v = re.sub(r"[^\d.]", "", v)
     if "TR" in v or not v:
-        return "0.0"
+        return ""
     try:
         return str(float(v))
     except:
-        return "0.0"
+        return ""
 
 def fuzzy_match(station_raw):
     matches = get_close_matches(station_raw, known_stations, n=1, cutoff=0.6)
@@ -36,7 +36,6 @@ SKIP_WORDS = [
     "station", "stations", "rainfall", "(mm)", "mm", "rainfall(mm)",
     "rainfall (mm)", "mean", "temp", "temperature", "maximum", "minimum"
 ]
-# Use broad pattern — no word boundaries
 pattern = r"(" + "|".join(SKIP_WORDS) + r")"
 
 # === LOAD EXISTING ===
@@ -81,7 +80,6 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 if df.iloc[0].str.contains("Station").any():
                     df = df.drop(0)
 
-                # Optional debug: save raw table
                 debug_table_path = os.path.join(folder_path, f"debug_table_{idx}.csv")
                 df.to_csv(debug_table_path, index=False)
 
@@ -105,6 +103,19 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
                     if re.search(pattern, station_raw.lower()):
                         print(f"⛔ SKIPPED HEADER: '{station_raw}'")
+                        continue
+
+                    # === NEW: validate that numeric data is real ===
+                    valid_row = False
+                    if table_type == "Temperature":
+                        if safe_number(row["Max"]) and safe_number(row["Min"]):
+                            valid_row = True
+                    elif table_type == "RainfallOnly":
+                        if safe_number(row["Rainfall"]):
+                            valid_row = True
+
+                    if not valid_row:
+                        print(f"⛔ SKIPPED NON-NUMERIC: '{station_raw}'")
                         continue
 
                     station = fuzzy_match(station_raw)
