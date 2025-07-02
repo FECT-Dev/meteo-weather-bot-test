@@ -23,7 +23,7 @@ def safe_number(v):
         return ""
     try:
         f = float(v)
-        if f < -10 or f > 60:  # reasonable range for temps/rainfall
+        if f < -10 or f > 60:  # reasonable for SL
             return ""
         return str(f)
     except:
@@ -140,23 +140,17 @@ for date_folder in sorted(os.listdir(reports_folder)):
         except Exception as e:
             print(f"❌ Error processing {file}: {e}")
 
-# === FINAL SAVE — OVERWRITE WITH LOCKED COLUMNS ===
+# === FINAL SAVE — OVERWRITE WITH TRUSTED COLUMNS ONLY ===
 if new_rows:
     cleaned_rows = []
+
     for row in new_rows:
-        cleaned = {
+        clean = {
             "Date": row["Date"],
             "Type": row["Type"]
         }
         for s in known_stations:
-            cleaned[s] = row.get(s, "")
-        cleaned_rows.append(cleaned)
+            clean[s] = row.get(s, "")
+        cleaned_rows.append(clean)
 
-    final_df = pd.DataFrame(cleaned_rows)
-    final_df = final_df[["Date", "Type"] + known_stations]]
-
-    # ✅ 🚫 Do NOT merge with old CSV — overwrite it!
-    final_df.to_csv(summary_file, index=False)
-    print(f"✅ Saved fresh: {summary_file} — Rows: {len(final_df)}")
-else:
-    print("⚠️ No new data added.")
+    final_d_
