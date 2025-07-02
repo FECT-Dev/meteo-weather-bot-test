@@ -23,7 +23,7 @@ def safe_number(v):
         return ""
     try:
         f = float(v)
-        if f < -10 or f > 60:  # unlikely for Sri Lanka
+        if f < -10 or f > 60:  # reasonable range
             return ""
         return str(f)
     except:
@@ -103,7 +103,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
                         print(f"⛔ SKIPPED HEADER: '{station_raw}'")
                         continue
 
-                    # ✅ Exact match only: never fuzzy
+                    # ✅ Exact match only
                     matches = [s for s in known_stations if s.lower() == station_raw.lower()]
                     if not matches:
                         print(f"❌ NO EXACT MATCH: '{station_raw}'")
@@ -113,52 +113,3 @@ for date_folder in sorted(os.listdir(reports_folder)):
                     valid = False
 
                     if table_type == "Temperature":
-                        max_val = safe_number(row["Max"])
-                        min_val = safe_number(row["Min"])
-                        if max_val and min_val:
-                            row_max[station] = max_val
-                            row_min[station] = min_val
-                            valid = True
-                        if "Rainfall" in row:
-                            rain_val = safe_number(row["Rainfall"])
-                            if rain_val:
-                                row_rain[station] = rain_val
-                                valid = True
-                    elif table_type == "RainfallOnly":
-                        rain_val = safe_number(row["Rainfall"])
-                        if rain_val:
-                            row_rain[station] = rain_val
-                            valid = True
-
-                    if valid:
-                        matched_stations.add(station)
-                        print(f"✅ SAVED: {station}")
-                    else:
-                        print(f"⛔ SKIPPED: No valid numbers for {station}")
-
-            if matched_stations:
-                for s in known_stations:
-                    row_max.setdefault(s, "")
-                    row_min.setdefault(s, "")
-                    row_rain.setdefault(s, "")
-                new_rows.extend([row_max, row_min, row_rain])
-                print(f"✅ {actual_date}: {len(matched_stations)} stations matched.")
-            else:
-                print(f"⚠️ {file}: No stations matched.")
-
-        except Exception as e:
-            print(f"❌ Error processing {file}: {e}")
-
-# === SAVE — LOCK COLUMNS ===
-if new_rows:
-    final_df = pd.DataFrame(new_rows)
-
-    # ✅ Lock to your trusted columns
-    columns_order = ["Date", "Type"] + known_stations
-    final_df = final_df[columns_order]
-
-    summary_df = pd.concat([summary_df, final_df], ignore_index=True)
-    summary_df.to_csv(summary_file, index=False)
-    print(f"✅ Saved: {summary_file} — Total rows: {len(summary_df)}")
-else:
-    print("⚠️ No new data added.")
