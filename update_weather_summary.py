@@ -23,7 +23,7 @@ def safe_number(v):
         return ""
     try:
         f = float(v)
-        if f < -10 or f > 60:  # reasonable for SL
+        if f < -10 or f > 60:
             return ""
         return str(f)
     except:
@@ -131,16 +131,17 @@ for date_folder in sorted(os.listdir(reports_folder)):
                     else:
                         print(f"⛔ SKIPPED: No valid numbers for {station}")
 
+            # ✅ FINAL GUARD: skip empty rows!
             if matched_stations:
                 new_rows.extend([row_max, row_min, row_rain])
                 print(f"✅ {actual_date}: {len(matched_stations)} stations matched.")
             else:
-                print(f"⚠️ {file}: No stations matched.")
+                print(f"⚠️ {file}: No stations matched — skipped empty rows.")
 
         except Exception as e:
             print(f"❌ Error processing {file}: {e}")
 
-# === FINAL SAVE — USE ONLY CLEANED ROWS, LOCKED COLUMNS ===
+# === FINAL SAVE — CLEANED ROWS ONLY ===
 if new_rows:
     cleaned_rows = []
 
@@ -153,13 +154,12 @@ if new_rows:
             clean[s] = row.get(s, "")
         cleaned_rows.append(clean)
 
-    # ✅ Build DataFrame ONLY from cleaned_rows!
     final_df = pd.DataFrame(cleaned_rows)
 
-    # ✅ Final bulletproof: reindex drops stray keys
+    # ✅ Bulletproof: reindex final columns
     final_df = final_df.reindex(columns=["Date", "Type"] + known_stations)
 
-    # ✅ Overwrite file — no merge, no leftover junk
+    # ✅ Overwrite: no merge, no junk
     final_df.to_csv(summary_file, index=False)
     print(f"✅ Overwrote clean: {summary_file} — {len(final_df)} rows")
 else:
