@@ -8,10 +8,10 @@ reports_folder = "reports"
 summary_file = "weather_summary.csv"
 
 known_stations = [
-    "Anuradhapura","Badulla","Bandarawela","Batticaloa","Colombo","Galle",
-    "Hambanthota","Jaffna","Monaragala","Katugasthota","Katunayake","Kurunegala",
-    "Maha Illuppallama","Mannar","Polonnaruwa","Nuwara Eliya","Pothuvil",
-    "Puttalam","Rathmalana","Rathnapura","Trincomalee","Vavuniya","Mattala",
+    "Anuradhapura", "Badulla", "Bandarawela", "Batticaloa", "Colombo", "Galle",
+    "Hambanthota", "Jaffna", "Monaragala", "Katugasthota", "Katunayake", "Kurunegala",
+    "Maha Illuppallama", "Mannar", "Polonnaruwa", "Nuwara Eliya", "Pothuvil",
+    "Puttalam", "Rathmalana", "Rathnapura", "Trincomalee", "Vavuniya", "Mattala",
     "Mullaitivu"
 ]
 
@@ -23,7 +23,7 @@ def safe_number(v):
         return ""
     try:
         f = float(v)
-        if f < -10 or f > 60:  # reasonable range
+        if f < -10 or f > 60:  # Reasonable for Sri Lanka
             return ""
         return str(f)
     except:
@@ -113,3 +113,55 @@ for date_folder in sorted(os.listdir(reports_folder)):
                     valid = False
 
                     if table_type == "Temperature":
+                        max_val = safe_number(row["Max"])
+                        min_val = safe_number(row["Min"])
+                        if max_val and min_val:
+                            row_max[station] = max_val
+                            row_min[station] = min_val
+                            valid = True
+                        if "Rainfall" in row:
+                            rain_val = safe_number(row["Rainfall"])
+                            if rain_val:
+                                row_rain[station] = rain_val
+                                valid = True
+                    elif table_type == "RainfallOnly":
+                        rain_val = safe_number(row["Rainfall"])
+                        if rain_val:
+                            row_rain[station] = rain_val
+                            valid = True
+
+                    if valid:
+                        matched_stations.add(station)
+                        print(f"✅ SAVED: {station}")
+                    else:
+                        print(f"⛔ SKIPPED: No valid numbers for {station}")
+
+            if matched_stations:
+                new_rows.extend([row_max, row_min, row_rain])
+                print(f"✅ {actual_date}: {len(matched_stations)} stations matched.")
+            else:
+                print(f"⚠️ {file}: No stations matched.")
+
+        except Exception as e:
+            print(f"❌ Error processing {file}: {e}")
+
+# === FINAL SAVE — LOCKED COLUMNS ===
+if new_rows:
+    cleaned_rows = []
+    for row in new_rows:
+        cleaned = {
+            "Date": row["Date"],
+            "Type": row["Type"]
+        }
+        for s in known_stations:
+            cleaned[s] = row.get(s, "")
+        cleaned_rows.append(cleaned)
+
+    final_df = pd.DataFrame(cleaned_rows)
+    final_df = final_df[["Date", "Type"] + known_stations]]
+
+    summary_df = pd.concat([summary_df, final_df], ignore_index=True)
+    summary_df.to_csv(summary_file, index=False)
+    print(f"✅ Saved: {summary_file} — Total rows: {len(summary_df)}")
+else:
+    print("⚠️ No new data added.")
