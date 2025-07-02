@@ -2,7 +2,6 @@ import os
 import re
 import pandas as pd
 import camelot
-from difflib import get_close_matches
 
 # === CONFIG ===
 reports_folder = "reports"
@@ -24,15 +23,11 @@ def safe_number(v):
         return ""
     try:
         f = float(v)
-        if f > 50 or f < -10:  # unreasonable temp or rainfall
+        if f > 50 or f < -10:
             return ""
         return str(f)
     except:
         return ""
-
-def fuzzy_match(station_raw):
-    matches = get_close_matches(station_raw, known_stations, n=1, cutoff=0.75)
-    return matches[0] if matches else None
 
 # === HEADERS/JUNK WORDS ===
 SKIP_WORDS = [
@@ -108,10 +103,13 @@ for date_folder in sorted(os.listdir(reports_folder)):
                         print(f"⛔ SKIPPED HEADER: '{station_raw}'")
                         continue
 
-                    station = fuzzy_match(station_raw)
-                    if not station:
-                        print(f"❌ UNMATCHED: '{station_raw}'")
+                    # Exact match only
+                    matches = [s for s in known_stations if s.lower() == station_raw.lower()]
+                    if not matches:
+                        print(f"❌ NO EXACT MATCH: '{station_raw}'")
                         continue
+
+                    station = matches[0]
 
                     valid = False
 
@@ -135,7 +133,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
                     if valid:
                         matched_stations.add(station)
-                        print(f"✅ SAVED: {station} | Max:{row_max.get(station,'')} Min:{row_min.get(station,'')} Rain:{row_rain.get(station,'')}")
+                        print(f"✅ SAVED: {station}")
                     else:
                         print(f"⛔ SKIPPED NO VALID NUMBERS: '{station_raw}' -> {station}")
 
