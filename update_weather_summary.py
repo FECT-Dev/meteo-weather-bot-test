@@ -3,6 +3,8 @@ import re
 import pandas as pd
 import camelot
 import PyPDF2
+from pdf2image import convert_from_path
+import pytesseract
 
 # === CONFIG ===
 reports_folder = "reports"
@@ -46,7 +48,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
     pdf_path = os.path.join(folder_path, expected_pdf)
 
     print(f"\n📂 Checking folder: {folder_path}")
-    print(f"Files in folder: {os.listdir(folder_path)}")
+    print(f"Files: {os.listdir(folder_path)}")
     print(f"Looking for: {expected_pdf} ➜ Exists: {os.path.exists(pdf_path)}")
 
     if not os.path.exists(pdf_path):
@@ -63,6 +65,8 @@ for date_folder in sorted(os.listdir(reports_folder)):
             actual_date = date_folder.strip()
     print(f"📅 Using date: {actual_date}")
 
+    valid_max, valid_min, valid_rain = {}, {}, {}
+
     try:
         tables = camelot.read_pdf(pdf_path, pages="1", flavor="stream")
         print(f"🔍 Stream tables found: {len(tables)}")
@@ -73,54 +77,77 @@ for date_folder in sorted(os.listdir(reports_folder)):
             print(f"🔍 Lattice tables found: {len(tables)}")
 
         if not tables or len(tables) == 0:
-            print(f"❌ No tables found in {expected_pdf} ➜ skipping.")
-            continue
+            print(f"⚠️ No tables found — trying OCR fallback...")
+            images = convert_from_path(pdf_path, dpi=300)
+            text = pytesseract.image_to_string(images[0])
+            print("\n=== OCR EXTRACTED TEXT ===\n")
+            print(text[:1000])  # show first 1000 chars
 
-        valid_max, valid_min, valid_rain = {}, {}, {}
-
-        for idx, table in enumerate(tables):
-            df = table.df
-            print(f"\n=== TABLE {idx} RAW ===\n{df}\n")
-            debug_table_path = os.path.join(folder_path, f"debug_table_{idx}.csv")
-            df.to_csv(debug_table_path, index=False)
-
-            if df.shape[1] >= 3:
-                df.columns = ["Station", "Max", "Min", "Rainfall"][:df.shape[1]]
-                table_type = "Temperature"
-            elif df.shape[1] == 2:
-                df.columns = ["Station", "Rainfall"]
-                table_type = "RainfallOnly"
-            else:
-                continue
-
-            print(f"=== TABLE {idx} WITH HEADERS ===\n{df}\n")
-
-            for _, row in df.iterrows():
-                station_raw = str(row["Station"]).replace("\n", " ").strip()
-                matches = re.findall(r"[A-Za-z]+", station_raw)
-                english_station = matches[-1].title() if matches else ""
-
-                print(f"🔍 Raw station: '{station_raw}' ➜ English: '{english_station}'")
-
-                if not english_station or english_station not in known_stations:
-                    print(f"❌ Not matched: '{english_station}'")
+            lines = text.split("\n")
+            for line in lines:
+                parts = re.split(r"\s+", line.strip())
+                matches = [part for part in parts if re.match(r"[A-Za-z]+", part)]
+                if not matches:
+                    continue
+                english_station = matches[-1].title()
+                if english_station not in known_stations:
                     continue
 
-                if table_type == "Temperature":
-                    max_val = safe_number(row["Max"], is_rainfall=False)
-                    min_val = safe_number(row["Min"], is_rainfall=False)
-                    rain_val = safe_number(row["Rainfall"], is_rainfall=True) if "Rainfall" in row else ""
+                nums = re.findall(r"\d+\.\d+", line)
+                if len(nums) >= 2:
+                    max_val = safe_number(nums[0], is_rainfall=False)
+                    min_val = safe_number(nums[1], is_rainfall=False)
                     if max_val:
                         valid_max[english_station] = max_val
                     if min_val:
                         valid_min[english_station] = min_val
+                if len(nums) >= 3:
+                    rain_val = safe_number(nums[2], is_rainfall=True)
                     if rain_val:
                         valid_rain[english_station] = rain_val
 
-                elif table_type == "RainfallOnly":
-                    rain_val = safe_number(row["Rainfall"], is_rainfall=True)
-                    if rain_val:
-                        valid_rain[english_station] = rain_val
+        else:
+            for idx, table in enumerate(tables):
+                df = table.df
+                print(f"\n=== TABLE {idx} RAW ===\n{df}\n")
+                df.to_csv(os.path.join(folder_path, f"debug_table_{idx}.csv"), index=False)
+
+                if df.shape[1] >= 3:
+                    df.columns = ["Station", "Max", "Min", "Rainfall"][:df.shape[1]]
+                    table_type = "Temperature"
+                elif df.shape[1] == 2:
+                    df.columns = ["Station", "Rainfall"]
+                    table_type = "RainfallOnly"
+                else:
+                    continue
+
+                print(f"=== TABLE {idx} WITH HEADERS ===\n{df}\n")
+
+                for _, row in df.iterrows():
+                    station_raw = str(row["Station"]).replace("\n", " ").strip()
+                    matches = re.findall(r"[A-Za-z]+", station_raw)
+                    english_station = matches[-1].title() if matches else ""
+
+                    print(f"🔍 Raw station: '{station_raw}' ➜ '{english_station}'")
+
+                    if not english_station or english_station not in known_stations:
+                        continue
+
+                    if table_type == "Temperature":
+                        max_val = safe_number(row["Max"], is_rainfall=False)
+                        min_val = safe_number(row["Min"], is_rainfall=False)
+                        rain_val = safe_number(row["Rainfall"], is_rainfall=True) if "Rainfall" in row else ""
+                        if max_val:
+                            valid_max[english_station] = max_val
+                        if min_val:
+                            valid_min[english_station] = min_val
+                        if rain_val:
+                            valid_rain[english_station] = rain_val
+
+                    elif table_type == "RainfallOnly":
+                        rain_val = safe_number(row["Rainfall"], is_rainfall=True)
+                        if rain_val:
+                            valid_rain[english_station] = rain_val
 
         # ✅ Always save 3 rows per date
         row_max = {"Date": actual_date, "Type": "Max"}
