@@ -23,7 +23,7 @@ def safe_number(v):
         return ""
     try:
         f = float(v)
-        if f < -10 or f > 60:  # reasonable range for temp/rainfall
+        if f < -10 or f > 60:  # reasonable for Sri Lanka temps/rainfall
             return ""
         return str(f)
     except:
@@ -146,7 +146,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
         except Exception as e:
             print(f"❌ Error processing {file}: {e}")
 
-# === FINAL SAVE — LOCKED COLUMNS ===
+# === FINAL SAVE — LOCKED COLUMNS NEW + OLD ===
 if new_rows:
     cleaned_rows = []
     for row in new_rows:
@@ -159,7 +159,11 @@ if new_rows:
         cleaned_rows.append(cleaned)
 
     final_df = pd.DataFrame(cleaned_rows)
-    final_df = final_df[["Date", "Type"] + known_stations]  # ✅ fixed: no extra bracket
+    final_df = final_df[["Date", "Type"] + known_stations]
+
+    # ✅ Re-filter old rows too, to drop any junk columns!
+    if not summary_df.empty:
+        summary_df = summary_df[["Date", "Type"] + known_stations]
 
     summary_df = pd.concat([summary_df, final_df], ignore_index=True)
     summary_df.to_csv(summary_file, index=False)
