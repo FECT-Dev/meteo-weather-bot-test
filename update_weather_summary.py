@@ -16,8 +16,7 @@ known_stations = [
     "Mullaitivu"
 ]
 
-# === HELPERS ===
-def safe_number(v):
+def safe_number(v, is_rainfall=False):
     v = str(v).upper().replace("O", "0").replace("|", "1").replace("I", "1").replace("l", "1")
     v = re.sub(r"[^\d.]", "", v)
     if not v:
@@ -25,6 +24,8 @@ def safe_number(v):
     try:
         f = float(v)
         if f < -10 or f > 60:
+            return ""
+        if not is_rainfall and f == 0.0:
             return ""
         return str(f)
     except:
@@ -44,7 +45,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
         pdf_path = os.path.join(folder_path, file)
 
-        # ✅ Extract real date from PDF text!
+        # ✅ Extract date from PDF header
         with open(pdf_path, "rb") as f:
             reader = PyPDF2.PdfReader(f)
             page_text = reader.pages[0].extract_text()
@@ -90,22 +91,22 @@ for date_folder in sorted(os.listdir(reports_folder)):
                     if not english_station or len(english_station) < 3:
                         continue
                     if english_station not in known_stations:
-                        print(f"❌ NO MATCH: {english_station}")
                         continue
 
                     if table_type == "Temperature":
-                        max_val = safe_number(row["Max"])
-                        min_val = safe_number(row["Min"])
+                        max_val = safe_number(str(row["Max"]).strip(), is_rainfall=False)
+                        min_val = safe_number(str(row["Min"]).strip(), is_rainfall=False)
+                        rain_val = safe_number(str(row["Rainfall"]).strip(), is_rainfall=True) if "Rainfall" in row else ""
+
                         if max_val:
                             valid_max[english_station] = max_val
                         if min_val:
                             valid_min[english_station] = min_val
-                        rain_val = safe_number(row["Rainfall"]) if "Rainfall" in row else ""
                         if rain_val:
                             valid_rain[english_station] = rain_val
 
                     elif table_type == "RainfallOnly":
-                        rain_val = safe_number(row["Rainfall"])
+                        rain_val = safe_number(str(row["Rainfall"]).strip(), is_rainfall=True)
                         if rain_val:
                             valid_rain[english_station] = rain_val
 
@@ -143,10 +144,7 @@ if new_rows:
         cleaned_rows.append(clean)
 
     final_df = pd.DataFrame(cleaned_rows)
-
     final_df = final_df.reindex(columns=["Date", "Type"] + known_stations)
-
-    # ✅ drop rows with all station data empty
     final_df = final_df.dropna(how="all", subset=known_stations)
 
     final_df.to_csv(summary_file, index=False)
