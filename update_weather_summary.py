@@ -16,19 +16,23 @@ known_stations = [
     "Mullaitivu"
 ]
 
+# === HELPERS ===
 def safe_number(v, is_rainfall=False):
-    v = str(v).upper().replace("O", "0").replace("|", "1").replace("I", "1").replace("l", "1")
+    original = v
+    v = str(v).upper().replace("O", "0").replace("|", "1").replace("I", "1").replace("l", "1").strip()
     v = re.sub(r"[^\d.]", "", v)
     if not v:
+        print(f"❌ Skipped empty for '{original}'")
         return ""
     try:
         f = float(v)
-        if f < -10 or f > 60:
+        if not is_rainfall and (f == 0.0 or f < -10 or f > 60):
+            print(f"❌ Skipped invalid: '{original}' => {f}")
             return ""
-        if not is_rainfall and f == 0.0:
-            return ""
+        print(f"✅ Safe number: '{original}' => {f}")
         return str(f)
     except:
+        print(f"❌ Failed parse: '{original}'")
         return ""
 
 # === MAIN LOOP ===
@@ -66,9 +70,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
             for idx, table in enumerate(tables):
                 df = table.df
-
-                if df.iloc[0].str.contains("Station").any():
-                    df = df.drop(0)
+                print(f"\n=== TABLE {idx} RAW ===\n{df}\n")
 
                 debug_table_path = os.path.join(folder_path, f"debug_table_{idx}.csv")
                 df.to_csv(debug_table_path, index=False)
@@ -82,15 +84,20 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 else:
                     continue
 
+                print(f"\n=== TABLE {idx} WITH HEADERS ===\n{df}\n")
+
                 for _, row in df.iterrows():
                     station_raw = str(row["Station"]).replace("\n", " ").strip()
                     station_raw = re.sub(r"[^\w\s]", "", station_raw)
                     parts = station_raw.split()
                     english_station = parts[-1].title() if parts else ""
 
+                    print(f"🔍 RAW STATION: '{station_raw}' | Clean: '{english_station}'")
+
                     if not english_station or len(english_station) < 3:
                         continue
                     if english_station not in known_stations:
+                        print(f"❌ NO MATCH: {english_station}")
                         continue
 
                     if table_type == "Temperature":
@@ -131,7 +138,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
         except Exception as e:
             print(f"❌ Error processing {file}: {e}")
 
-# === FINAL SAVE — CLEANED ONLY, DROP EMPTY ===
+# === FINAL SAVE ===
 if new_rows:
     cleaned_rows = []
     for row in new_rows:
