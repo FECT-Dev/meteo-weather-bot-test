@@ -23,7 +23,7 @@ def safe_number(v):
         return ""
     try:
         f = float(v)
-        if f < -10 or f > 60:
+        if f < -10 or f > 60:  # reasonable range for temp/rainfall
             return ""
         return str(f)
     except:
@@ -105,8 +105,9 @@ for date_folder in sorted(os.listdir(reports_folder)):
                     if table_type == "Temperature":
                         max_val = safe_number(row["Max"])
                         min_val = safe_number(row["Min"])
-                        if max_val and min_val:
+                        if max_val:
                             row_max[station] = max_val
+                        if min_val:
                             row_min[station] = min_val
                         if "Rainfall" in row:
                             rain_val = safe_number(row["Rainfall"])
@@ -118,30 +119,25 @@ for date_folder in sorted(os.listdir(reports_folder)):
                         if rain_val:
                             row_rain[station] = rain_val
 
-            # ✅ FINAL GUARD — only keep rows with real station data
-            max_valid = any(row_max.get(s) for s in known_stations)
-            min_valid = any(row_min.get(s) for s in known_stations)
-            rain_valid = any(row_rain.get(s) for s in known_stations)
-
-            if max_valid:
+            # ✅ FINAL GUARD: only add rows with real data
+            if any(row_max.get(s) for s in known_stations):
                 new_rows.append(row_max)
-            if min_valid:
+            if any(row_min.get(s) for s in known_stations):
                 new_rows.append(row_min)
-            if rain_valid:
+            if any(row_rain.get(s) for s in known_stations):
                 new_rows.append(row_rain)
 
-            if max_valid or min_valid or rain_valid:
-                print(f"✅ {actual_date}: Row(s) with valid data saved.")
+            if any(row_max.get(s) for s in known_stations) or any(row_min.get(s) for s in known_stations) or any(row_rain.get(s) for s in known_stations):
+                print(f"✅ {actual_date}: Valid rows saved.")
             else:
                 print(f"⚠️ {file}: No valid data — skipped.")
 
         except Exception as e:
             print(f"❌ Error processing {file}: {e}")
 
-# === FINAL SAVE — CLEANED ONLY ===
+# === FINAL SAVE — CLEANED ONLY, DROP EMPTY ===
 if new_rows:
     cleaned_rows = []
-
     for row in new_rows:
         clean = {
             "Date": row["Date"],
@@ -153,8 +149,11 @@ if new_rows:
 
     final_df = pd.DataFrame(cleaned_rows)
 
-    # ✅ Bulletproof: reindex final columns
+    # ✅ force trusted columns
     final_df = final_df.reindex(columns=["Date", "Type"] + known_stations)
+
+    # ✅ drop rows with all station data empty
+    final_df = final_df.dropna(how="all", subset=known_stations)
 
     final_df.to_csv(summary_file, index=False)
     print(f"✅ Overwrote clean: {summary_file} — {len(final_df)} rows")
