@@ -31,6 +31,12 @@ def fuzzy_match(station_raw):
     matches = get_close_matches(station_raw, known_stations, n=1, cutoff=0.6)
     return matches[0] if matches else None
 
+# === KNOWN HEADER WORDS TO SKIP ===
+SKIP_WORDS = [
+    "station", "stations", "rainfall", "(mm)", "mm", "rainfall(mm)",
+    "rainfall (mm)", "mean", "temp", "temperature", "maximum", "minimum"
+]
+
 # === LOAD EXISTING ===
 summary_df = pd.read_csv(summary_file) if os.path.exists(summary_file) else pd.DataFrame()
 new_rows = []
@@ -74,7 +80,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 if df.iloc[0].str.contains("Station").any():
                     df = df.drop(0)
 
-                # Debug: save each table if needed
+                # Optional debug: save each table
                 # debug_table_path = os.path.join(folder_path, f"debug_table_{tables.index(table)}.csv")
                 # df.to_csv(debug_table_path, index=False)
 
@@ -89,11 +95,12 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
                 for _, row in df.iterrows():
                     station_raw = str(row["Station"]).replace("\n", " ").strip().title()
+                    station_raw = re.sub(r"\s+", " ", station_raw)  # Normalize spaces
 
-                    # === Filter bad rows ===
+                    # === Strong skip filter ===
                     if len(station_raw) < 3:
                         continue
-                    if station_raw.lower() in ["stations", "station", "rainfall", "(mm)", "mm", "rainfall(mm)"]:
+                    if any(skip in station_raw.lower() for skip in SKIP_WORDS):
                         continue
 
                     station = fuzzy_match(station_raw)
