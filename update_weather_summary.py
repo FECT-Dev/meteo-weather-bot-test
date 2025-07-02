@@ -22,17 +22,13 @@ def safe_number(v, is_rainfall=False):
     v = str(v).upper().replace("O", "0").replace("|", "1").replace("I", "1").replace("l", "1").strip()
     v = re.sub(r"[^\d.]", "", v)
     if not v:
-        print(f"❌ Skipped empty for '{original}'")
         return ""
     try:
         f = float(v)
         if not is_rainfall and (f == 0.0 or f < -10 or f > 60):
-            print(f"❌ Skipped invalid: '{original}' => {f}")
             return ""
-        print(f"✅ Safe number: '{original}' => {f}")
         return str(f)
     except:
-        print(f"❌ Failed parse: '{original}'")
         return ""
 
 # === MAIN LOOP ===
@@ -88,16 +84,16 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
                 for _, row in df.iterrows():
                     station_raw = str(row["Station"]).replace("\n", " ").strip()
-                    station_raw = re.sub(r"[^\w\s]", "", station_raw)
-                    parts = station_raw.split()
-                    english_station = parts[-1].title() if parts else ""
+                    # ✅ Extract only English word from mixed Sinhala/English
+                    matches = re.findall(r"[A-Za-z]+", station_raw)
+                    english_station = matches[-1].title() if matches else ""
 
-                    print(f"🔍 RAW STATION: '{station_raw}' | Clean: '{english_station}'")
+                    print(f"🔍 Station Raw: '{station_raw}' => English: '{english_station}'")
 
                     if not english_station or len(english_station) < 3:
                         continue
                     if english_station not in known_stations:
-                        print(f"❌ NO MATCH: {english_station}")
+                        print(f"❌ No match: {english_station}")
                         continue
 
                     if table_type == "Temperature":
