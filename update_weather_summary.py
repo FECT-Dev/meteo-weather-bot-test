@@ -21,13 +21,17 @@ def safe_number(v, is_rainfall=False):
     v = str(v).upper().replace("O", "0").replace("|", "1").replace("I", "1").replace("l", "1").strip()
     v = re.sub(r"[^\d.]", "", v)
     if not v:
+        print(f"❌ Empty for: '{original}'")
         return ""
     try:
         f = float(v)
         if not is_rainfall and (f == 0.0 or f < -10 or f > 60):
+            print(f"❌ Invalid Max/Min: '{original}' ➜ {f}")
             return ""
+        print(f"✅ Parsed: '{original}' ➜ {f}")
         return str(f)
     except:
+        print(f"❌ Parse error: '{original}'")
         return ""
 
 # === MAIN LOOP ===
@@ -46,10 +50,9 @@ for date_folder in sorted(os.listdir(reports_folder)):
     print(f"Looking for: {expected_pdf} ➜ Exists: {os.path.exists(pdf_path)}")
 
     if not os.path.exists(pdf_path):
-        print(f"⚠️ Skipping {date_folder}: {expected_pdf} not found.")
+        print(f"⚠️ Skipping {date_folder}: PDF not found.")
         continue
 
-    # === Extract date from PDF ===
     with open(pdf_path, "rb") as f:
         reader = PyPDF2.PdfReader(f)
         page_text = reader.pages[0].extract_text()
@@ -62,15 +65,15 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
     try:
         tables = camelot.read_pdf(pdf_path, pages="1", flavor="stream")
-        print(f"🔍 Tables found with stream: {len(tables)}")
+        print(f"🔍 Stream tables found: {len(tables)}")
 
         if not tables or len(tables) == 0:
             print("⚠️ Trying flavor='lattice' instead...")
             tables = camelot.read_pdf(pdf_path, pages="1", flavor="lattice")
-            print(f"🔍 Tables found with lattice: {len(tables)}")
+            print(f"🔍 Lattice tables found: {len(tables)}")
 
         if not tables or len(tables) == 0:
-            print(f"❌ No tables found in {expected_pdf} — skipping.")
+            print(f"❌ No tables found in {expected_pdf} ➜ skipping.")
             continue
 
         valid_max, valid_min, valid_rain = {}, {}, {}
@@ -78,7 +81,6 @@ for date_folder in sorted(os.listdir(reports_folder)):
         for idx, table in enumerate(tables):
             df = table.df
             print(f"\n=== TABLE {idx} RAW ===\n{df}\n")
-
             debug_table_path = os.path.join(folder_path, f"debug_table_{idx}.csv")
             df.to_csv(debug_table_path, index=False)
 
@@ -98,9 +100,10 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 matches = re.findall(r"[A-Za-z]+", station_raw)
                 english_station = matches[-1].title() if matches else ""
 
-                print(f"🔍 Station Raw: '{station_raw}' ➜ English: '{english_station}'")
+                print(f"🔍 Raw station: '{station_raw}' ➜ English: '{english_station}'")
 
                 if not english_station or english_station not in known_stations:
+                    print(f"❌ Not matched: '{english_station}'")
                     continue
 
                 if table_type == "Temperature":
@@ -130,6 +133,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
         new_rows.extend([row_max, row_min, row_rain])
         print(f"✅ {actual_date}: Added Max, Min, Rainfall rows.")
+        print(f"✅ Stations with data: Max={len(valid_max)}, Min={len(valid_min)}, Rainfall={len(valid_rain)}")
 
     except Exception as e:
         print(f"❌ Error processing {expected_pdf}: {e}")
