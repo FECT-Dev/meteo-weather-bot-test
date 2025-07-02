@@ -2,6 +2,7 @@ import os
 import re
 import pandas as pd
 import camelot
+import PyPDF2
 
 # === CONFIG ===
 reports_folder = "reports"
@@ -23,18 +24,11 @@ def safe_number(v):
         return ""
     try:
         f = float(v)
-        if f < -10 or f > 60:  # reasonable range for temp/rainfall
+        if f < -10 or f > 60:
             return ""
         return str(f)
     except:
         return ""
-
-# === HEADERS/JUNK WORDS ===
-SKIP_WORDS = [
-    "station", "stations", "rainfall", "(mm)", "mm", "rainfall(mm)",
-    "rainfall (mm)", "mean", "temp", "temperature", "maximum", "minimum"
-]
-pattern = r"(" + "|".join(SKIP_WORDS) + r")"
 
 # === MAIN LOOP ===
 new_rows = []
@@ -49,10 +43,17 @@ for date_folder in sorted(os.listdir(reports_folder)):
             continue
 
         pdf_path = os.path.join(folder_path, file)
-        actual_date = date_folder.strip()
-        if not re.match(r"\d{4}-\d{2}-\d{2}", actual_date):
-            print(f"⚠️ Skipping {file}: folder name not valid date: {actual_date}")
-            continue
+
+        # ✅ Extract real date from PDF text!
+        with open(pdf_path, "rb") as f:
+            reader = PyPDF2.PdfReader(f)
+            page_text = reader.pages[0].extract_text()
+            date_match = re.search(r"\d{4}\.\d{2}\.\d{2}", page_text)
+            if date_match:
+                actual_date = date_match.group(0).replace(".", "-")
+            else:
+                actual_date = date_folder.strip()
+        print(f"📅 Extracted date: {actual_date}")
 
         try:
             tables = camelot.read_pdf(pdf_path, pages="1", flavor="stream")
@@ -60,9 +61,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 print(f"⚠️ {file}: No table found.")
                 continue
 
-            row_max = {"Date": actual_date, "Type": "Max"}
-            row_min = {"Date": actual_date, "Type": "Min"}
-            row_rain = {"Date": actual_date, "Type": "Rainfall"}
+            valid_max, valid_min, valid_rain = {}, {}, {}
 
             for idx, table in enumerate(tables):
                 df = table.df
@@ -83,51 +82,47 @@ for date_folder in sorted(os.listdir(reports_folder)):
                     continue
 
                 for _, row in df.iterrows():
-                    station_raw = str(row["Station"]).replace("\n", " ").strip().title()
-                    station_raw = re.sub(r"\s+", " ", station_raw)
+                    station_raw = str(row["Station"]).replace("\n", " ").strip()
+                    station_raw = re.sub(r"[^\w\s]", "", station_raw)
+                    parts = station_raw.split()
+                    english_station = parts[-1].title() if parts else ""
 
-                    print(f"🔍 RAW STATION: '{station_raw}'")
-
-                    if len(station_raw) < 3:
+                    if not english_station or len(english_station) < 3:
                         continue
-
-                    if re.search(pattern, station_raw.lower()):
-                        print(f"⛔ SKIPPED HEADER: '{station_raw}'")
+                    if english_station not in known_stations:
+                        print(f"❌ NO MATCH: {english_station}")
                         continue
-
-                    matches = [s for s in known_stations if s.lower() == station_raw.lower()]
-                    if not matches:
-                        print(f"❌ NO EXACT MATCH: '{station_raw}'")
-                        continue
-
-                    station = matches[0]
 
                     if table_type == "Temperature":
                         max_val = safe_number(row["Max"])
                         min_val = safe_number(row["Min"])
                         if max_val:
-                            row_max[station] = max_val
+                            valid_max[english_station] = max_val
                         if min_val:
-                            row_min[station] = min_val
-                        if "Rainfall" in row:
-                            rain_val = safe_number(row["Rainfall"])
-                            if rain_val:
-                                row_rain[station] = rain_val
+                            valid_min[english_station] = min_val
+                        rain_val = safe_number(row["Rainfall"]) if "Rainfall" in row else ""
+                        if rain_val:
+                            valid_rain[english_station] = rain_val
 
                     elif table_type == "RainfallOnly":
                         rain_val = safe_number(row["Rainfall"])
                         if rain_val:
-                            row_rain[station] = rain_val
+                            valid_rain[english_station] = rain_val
 
-            # ✅ FINAL GUARD: only add rows with real data
-            if any(row_max.get(s) for s in known_stations):
+            if valid_max:
+                row_max = {"Date": actual_date, "Type": "Max"}
+                row_max.update(valid_max)
                 new_rows.append(row_max)
-            if any(row_min.get(s) for s in known_stations):
+            if valid_min:
+                row_min = {"Date": actual_date, "Type": "Min"}
+                row_min.update(valid_min)
                 new_rows.append(row_min)
-            if any(row_rain.get(s) for s in known_stations):
+            if valid_rain:
+                row_rain = {"Date": actual_date, "Type": "Rainfall"}
+                row_rain.update(valid_rain)
                 new_rows.append(row_rain)
 
-            if any(row_max.get(s) for s in known_stations) or any(row_min.get(s) for s in known_stations) or any(row_rain.get(s) for s in known_stations):
+            if valid_max or valid_min or valid_rain:
                 print(f"✅ {actual_date}: Valid rows saved.")
             else:
                 print(f"⚠️ {file}: No valid data — skipped.")
@@ -149,7 +144,6 @@ if new_rows:
 
     final_df = pd.DataFrame(cleaned_rows)
 
-    # ✅ force trusted columns
     final_df = final_df.reindex(columns=["Date", "Type"] + known_stations)
 
     # ✅ drop rows with all station data empty
