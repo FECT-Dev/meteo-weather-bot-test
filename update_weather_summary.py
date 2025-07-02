@@ -23,7 +23,7 @@ def safe_number(v):
         return ""
     try:
         f = float(v)
-        if f < -10 or f > 60:  # Reasonable for Sri Lanka
+        if f < -10 or f > 60:  # reasonable range for temp/rainfall
             return ""
         return str(f)
     except:
@@ -124,6 +124,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
                             if rain_val:
                                 row_rain[station] = rain_val
                                 valid = True
+
                     elif table_type == "RainfallOnly":
                         rain_val = safe_number(row["Rainfall"])
                         if rain_val:
@@ -158,7 +159,7 @@ if new_rows:
         cleaned_rows.append(cleaned)
 
     final_df = pd.DataFrame(cleaned_rows)
-    final_df = final_df[["Date", "Type"] + known_stations]]
+    final_df = final_df[["Date", "Type"] + known_stations]  # ✅ fixed: no extra bracket
 
     summary_df = pd.concat([summary_df, final_df], ignore_index=True)
     summary_df.to_csv(summary_file, index=False)
