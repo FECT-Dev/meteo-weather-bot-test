@@ -9,15 +9,14 @@ reports_folder = "reports"
 summary_file = "weather_summary.csv"
 
 known_stations = [
-    "Anuradhapura", "Badulla", "Bandarawela", "Batticaloa", "Colombo", "Galle",
-    "Hambanthota", "Jaffna", "Monaragala", "Katugasthota", "Katunayake", "Kurunegala",
-    "Maha Illuppallama", "Mannar", "Polonnaruwa", "Nuwara Eliya", "Pothuvil",
-    "Puttalam", "Rathmalana", "Rathnapura", "Trincomalee", "Vavuniya", "Mattala",
+    "Anuradhapura","Badulla","Bandarawela","Batticaloa","Colombo","Galle",
+    "Hambanthota","Jaffna","Monaragala","Katugasthota","Katunayake","Kurunegala",
+    "Maha Illuppallama","Mannar","Polonnaruwa","Nuwara Eliya","Pothuvil",
+    "Puttalam","Rathmalana","Rathnapura","Trincomalee","Vavuniya","Mattala",
     "Mullaitivu"
 ]
 
 def safe_number(v):
-    """Clean common OCR issues in numeric cells"""
     v = str(v).upper().replace("O", "0").replace("|", "1").replace("I", "1").replace("l", "1")
     v = re.sub(r"[^\d.]", "", v)
     if "TR" in v or not v: return "0.0"
@@ -25,7 +24,6 @@ def safe_number(v):
     except: return "0.0"
 
 def fuzzy_match(station_raw):
-    """Fuzzy match station name"""
     matches = get_close_matches(station_raw, known_stations, n=1, cutoff=0.6)
     return matches[0] if matches else None
 
@@ -64,55 +62,50 @@ for date_folder in sorted(os.listdir(reports_folder)):
             row_min = {"Date": actual_date, "Type": "Min"}
             row_rain = {"Date": actual_date, "Type": "Rainfall"}
 
-            matched = 0
+            matched_stations = set()
 
             for table in tables:
                 df = table.df
 
-                # Drop header if present
                 if df.iloc[0].str.contains("Station").any():
                     df = df.drop(0)
 
-                # Decide table type
                 if df.shape[1] >= 3:
                     df.columns = ["Station", "Max", "Min", "Rainfall"][:df.shape[1]]
-                    table_type = "Temperature"
-                elif df.shape[1] == 2:
-                    df.columns = ["Station", "Rainfall"]
-                    table_type = "RainfallOnly"
-                else:
-                    continue
-
-                for _, row in df.iterrows():
-                    station_raw = str(row["Station"]).replace("\n", " ").strip().title()
-                    if not station_raw or len(station_raw) < 3:
-                        continue
-
-                    station = fuzzy_match(station_raw)
-                    if not station:
-                        continue
-
-                    if table_type == "Temperature":
+                    for _, row in df.iterrows():
+                        station_raw = str(row["Station"]).replace("\n", " ").strip().title()
+                        if len(station_raw) < 3:
+                            continue
+                        station = fuzzy_match(station_raw)
+                        if not station:
+                            continue
                         row_max[station] = safe_number(row["Max"])
                         row_min[station] = safe_number(row["Min"])
                         if "Rainfall" in row:
                             row_rain[station] = safe_number(row["Rainfall"])
-                    elif table_type == "RainfallOnly":
+                        matched_stations.add(station)
+                elif df.shape[1] == 2:
+                    df.columns = ["Station", "Rainfall"]
+                    for _, row in df.iterrows():
+                        station_raw = str(row["Station"]).replace("\n", " ").strip().title()
+                        if len(station_raw) < 3:
+                            continue
+                        station = fuzzy_match(station_raw)
+                        if not station:
+                            continue
                         row_rain[station] = safe_number(row["Rainfall"])
+                        matched_stations.add(station)
 
-                    matched += 1
-
-            if matched:
-                # Fill missing stations with blank
+            if matched_stations:
+                # Ensure every station is present
                 for s in known_stations:
                     row_max.setdefault(s, "")
                     row_min.setdefault(s, "")
                     row_rain.setdefault(s, "")
-
                 new_rows.extend([row_max, row_min, row_rain])
-                print(f"✅ {actual_date}: {matched} stations matched.")
+                print(f"✅ {actual_date}: {len(matched_stations)} stations matched.")
             else:
-                print(f"⚠️ {file}: No valid stations matched.")
+                print(f"⚠️ {file}: No stations matched.")
 
         except Exception as e:
             print(f"❌ Error processing {file}: {e}")
@@ -120,11 +113,8 @@ for date_folder in sorted(os.listdir(reports_folder)):
 # === SAVE ===
 if new_rows:
     final_df = pd.DataFrame(new_rows)
-
-    # Order: Date, Type, known_stations
     columns_order = ["Date", "Type"] + known_stations
     final_df = final_df[columns_order]
-
     summary_df = pd.concat([summary_df, final_df], ignore_index=True)
     summary_df.to_csv(summary_file, index=False)
     print(f"✅ Saved: {summary_file} — Total rows: {len(summary_df)}")
