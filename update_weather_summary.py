@@ -31,11 +31,13 @@ def fuzzy_match(station_raw):
     matches = get_close_matches(station_raw, known_stations, n=1, cutoff=0.6)
     return matches[0] if matches else None
 
-# === KNOWN HEADER WORDS TO SKIP ===
+# === HEADERS/JUNK WORDS ===
 SKIP_WORDS = [
     "station", "stations", "rainfall", "(mm)", "mm", "rainfall(mm)",
     "rainfall (mm)", "mean", "temp", "temperature", "maximum", "minimum"
 ]
+# Build regex pattern for partial word match
+pattern = r"\b(" + "|".join(SKIP_WORDS) + r")\b"
 
 # === LOAD EXISTING ===
 summary_df = pd.read_csv(summary_file) if os.path.exists(summary_file) else pd.DataFrame()
@@ -67,22 +69,21 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 print(f"⚠️ {file}: No table found.")
                 continue
 
-            # Create empty rows for this date
             row_max = {"Date": actual_date, "Type": "Max"}
             row_min = {"Date": actual_date, "Type": "Min"}
             row_rain = {"Date": actual_date, "Type": "Rainfall"}
 
             matched_stations = set()
 
-            for table in tables:
+            for idx, table in enumerate(tables):
                 df = table.df
 
                 if df.iloc[0].str.contains("Station").any():
                     df = df.drop(0)
 
-                # Optional debug: save each table
-                # debug_table_path = os.path.join(folder_path, f"debug_table_{tables.index(table)}.csv")
-                # df.to_csv(debug_table_path, index=False)
+                # Optional: save raw table for debugging
+                debug_table_path = os.path.join(folder_path, f"debug_table_{idx}.csv")
+                df.to_csv(debug_table_path, index=False)
 
                 if df.shape[1] >= 3:
                     df.columns = ["Station", "Max", "Min", "Rainfall"][:df.shape[1]]
@@ -95,17 +96,20 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
                 for _, row in df.iterrows():
                     station_raw = str(row["Station"]).replace("\n", " ").strip().title()
-                    station_raw = re.sub(r"\s+", " ", station_raw)  # Normalize spaces
+                    station_raw = re.sub(r"\s+", " ", station_raw)
 
-                    # === Strong skip filter ===
+                    print(f"🔍 RAW STATION: '{station_raw}'")
+
                     if len(station_raw) < 3:
                         continue
-                    if any(skip in station_raw.lower() for skip in SKIP_WORDS):
+
+                    if re.search(pattern, station_raw.lower()):
+                        print(f"⛔ SKIPPED HEADER: '{station_raw}'")
                         continue
 
                     station = fuzzy_match(station_raw)
                     if not station:
-                        print(f"❌ UNMATCHED: {station_raw}")
+                        print(f"❌ UNMATCHED: '{station_raw}'")
                         continue
 
                     if table_type == "Temperature":
