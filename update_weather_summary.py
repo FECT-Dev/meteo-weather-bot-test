@@ -5,6 +5,7 @@ import camelot
 import PyPDF2
 from pdf2image import convert_from_path
 import pytesseract
+from difflib import get_close_matches
 
 # === CONFIG ===
 reports_folder = "reports"
@@ -31,6 +32,15 @@ def safe_number(v, is_rainfall=False):
         return str(f)
     except:
         return ""
+
+def match_station(name):
+    name = name.lower()
+    best = get_close_matches(name, [s.lower() for s in known_stations], n=1, cutoff=0.6)
+    if best:
+        for s in known_stations:
+            if s.lower() == best[0]:
+                return s
+    return None
 
 new_rows = []
 
@@ -88,10 +98,10 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 matches = re.findall(r"[A-Za-z]+", line)
                 if matches:
                     possible_station = matches[-1].title()
-                    if possible_station not in known_stations:
+                    possible_station = match_station(possible_station)
+                    if not possible_station:
                         continue
 
-                    # Look ahead for numbers in next 1–2 lines
                     for offset in range(1, 3):
                         if i+offset < len(lines):
                             next_line = lines[i+offset].strip()
@@ -127,8 +137,9 @@ for date_folder in sorted(os.listdir(reports_folder)):
                     station_raw = str(row["Station"]).replace("\n", " ").strip()
                     matches = re.findall(r"[A-Za-z]+", station_raw)
                     english_station = matches[-1].title() if matches else ""
+                    english_station = match_station(english_station)
 
-                    if not english_station or english_station not in known_stations:
+                    if not english_station:
                         continue
 
                     if table_type == "Temperature":
