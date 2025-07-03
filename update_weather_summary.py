@@ -42,7 +42,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
     expected_pdf = f"weather-{date_folder}.pdf"
     pdf_path = os.path.join(folder_path, expected_pdf)
 
-    print(f"\n📂 Checking folder: {folder_path}")
+    print(f"\n📂 Checking: {folder_path}")
     print(f"Files: {os.listdir(folder_path)}")
     print(f"Looking for: {expected_pdf} ➜ Exists: {os.path.exists(pdf_path)}")
 
@@ -50,7 +50,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
         print(f"⚠️ Skipping {date_folder}: PDF not found.")
         continue
 
-    # === Extract date from PDF ===
+    # === Extract real date ===
     with open(pdf_path, "rb") as f:
         reader = PyPDF2.PdfReader(f)
         page_text = reader.pages[0].extract_text()
@@ -64,7 +64,6 @@ for date_folder in sorted(os.listdir(reports_folder)):
     valid_max, valid_min, valid_rain = {}, {}, {}
 
     try:
-        # === Try Camelot ===
         tables = camelot.read_pdf(pdf_path, pages="1", flavor="stream")
         print(f"🔍 Stream tables: {len(tables)}")
 
@@ -91,12 +90,14 @@ for date_folder in sorted(os.listdir(reports_folder)):
                     possible_station = matches[-1].title()
                     if possible_station not in known_stations:
                         continue
+
                     # Look ahead for numbers in next 1–2 lines
                     for offset in range(1, 3):
                         if i+offset < len(lines):
                             next_line = lines[i+offset].strip()
                             nums = re.findall(r"\d+\.\d+", next_line)
                             if nums:
+                                max_val = min_val = rain_val = ""
                                 if len(nums) >= 2:
                                     max_val = safe_number(nums[0])
                                     min_val = safe_number(nums[1])
@@ -105,13 +106,14 @@ for date_folder in sorted(os.listdir(reports_folder)):
                                 if len(nums) >= 3:
                                     rain_val = safe_number(nums[2], is_rainfall=True)
                                     if rain_val: valid_rain[possible_station] = rain_val
-                                print(f"✅ OCR Match: {possible_station} ➜ Max:{max_val} Min:{min_val} Rain:{rain_val}")
+                                print(f"✅ OCR: {possible_station} ➜ Max:{max_val} Min:{min_val} Rain:{rain_val}")
                                 break
 
         else:
             for idx, table in enumerate(tables):
                 df = table.df
                 df.to_csv(os.path.join(folder_path, f"debug_table_{idx}.csv"), index=False)
+
                 if df.shape[1] >= 3:
                     df.columns = ["Station", "Max", "Min", "Rainfall"][:df.shape[1]]
                     table_type = "Temperature"
