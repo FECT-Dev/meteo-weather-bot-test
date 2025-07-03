@@ -10,6 +10,7 @@ from difflib import get_close_matches
 # === CONFIG ===
 reports_folder = "reports"
 summary_file = "weather_summary.csv"
+fallback_file = "fallback.csv"   # ✅ You can create fallback.csv manually when needed
 
 known_stations = [
     "Anuradhapura", "Badulla", "Bandarawela", "Batticaloa", "Colombo", "Galle",
@@ -64,7 +65,6 @@ for date_folder in sorted(os.listdir(reports_folder)):
         print(f"⚠️ Skipping {date_folder}: PDF not found.")
         continue
 
-    # === Extract real date ===
     with open(pdf_path, "rb") as f:
         reader = PyPDF2.PdfReader(f)
         page_text = reader.pages[0].extract_text()
@@ -75,7 +75,6 @@ for date_folder in sorted(os.listdir(reports_folder)):
     valid_max, valid_min, valid_rain = {}, {}, {}
 
     try:
-        # === Try Camelot stream ===
         tables = camelot.read_pdf(pdf_path, pages="1", flavor="stream")
         print(f"🔍 Stream tables: {len(tables)}")
         if len(tables) == 0:
@@ -165,6 +164,13 @@ for date_folder in sorted(os.listdir(reports_folder)):
 if new_rows:
     final_df = pd.DataFrame(new_rows)
     final_df = final_df.reindex(columns=["Date", "Type"] + known_stations)
+
+    # ✅ Merge fallback.csv if it exists
+    if os.path.exists(fallback_file):
+        fallback_df = pd.read_csv(fallback_file)
+        final_df = pd.concat([final_df, fallback_df], ignore_index=True)
+        print(f"✅ Merged fallback.csv — added {len(fallback_df)} rows.")
+
     final_df.drop_duplicates(subset=["Date", "Type"], keep="last", inplace=True)
     final_df.fillna("", inplace=True)
     final_df.to_csv(summary_file, index=False)
