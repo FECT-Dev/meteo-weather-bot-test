@@ -20,7 +20,6 @@ known_stations = [
 ]
 
 def safe_number(v, is_rainfall=False):
-    original = v
     v = str(v).upper().replace("O", "0").replace("|", "1").replace("I", "1").replace("l", "1").strip()
     v = re.sub(r"[^\d.]", "", v)
     if not v:
@@ -33,10 +32,17 @@ def safe_number(v, is_rainfall=False):
     except:
         return ""
 
+def clean_station_name(name):
+    """Fix known bad OCR patterns"""
+    if "mahalluppallama" in name:
+        return "maha illuppallama"
+    if "kattunayake" in name:
+        return "katunayake"
+    return name
+
 def match_station(name):
-    """ Fuzzy match to known_stations with a wider net """
-    name = name.lower()
-    best = get_close_matches(name, [s.lower() for s in known_stations], n=1, cutoff=0.5)
+    name = clean_station_name(name.lower())
+    best = get_close_matches(name, [s.lower() for s in known_stations], n=1, cutoff=0.4)
     if best:
         for s in known_stations:
             if s.lower() == best[0]:
