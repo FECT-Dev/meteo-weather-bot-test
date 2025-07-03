@@ -175,13 +175,14 @@ for date_folder in sorted(os.listdir(reports_folder)):
                     if min_val: valid_min[english_station] = min_val
                     if rain_val: valid_rain[english_station] = rain_val
 
-        # === Always save rows ===
+        # === Always save 3 rows ===
         row_max = {"Date": actual_date, "Type": "Max"}
         row_min = {"Date": actual_date, "Type": "Min"}
         row_rain = {"Date": actual_date, "Type": "Rainfall"}
-        row_max.update(valid_max)
-        row_min.update(valid_min)
-        row_rain.update(valid_rain)
+        for s in known_stations:
+            row_max[s] = valid_max.get(s, "")
+            row_min[s] = valid_min.get(s, "")
+            row_rain[s] = valid_rain.get(s, "")
         new_rows.extend([row_max, row_min, row_rain])
 
         print(f"✅ {actual_date}: Max={len(valid_max)}, Min={len(valid_min)}, Rainfall={len(valid_rain)}")
@@ -191,15 +192,9 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
 # === FINAL SAVE ===
 if new_rows:
-    cleaned_rows = []
-    for row in new_rows:
-        clean = {"Date": row["Date"], "Type": row["Type"]}
-        for s in known_stations:
-            clean[s] = row.get(s, "")
-        cleaned_rows.append(clean)
-
-    final_df = pd.DataFrame(cleaned_rows)
+    final_df = pd.DataFrame(new_rows)
     final_df = final_df.reindex(columns=["Date", "Type"] + known_stations)
+    final_df.fillna("", inplace=True)  # Keep blank if no value found
     final_df.to_csv(summary_file, index=False)
     print(f"✅ Saved: {summary_file} — {len(final_df)} rows")
 else:
