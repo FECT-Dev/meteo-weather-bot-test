@@ -20,6 +20,7 @@ known_stations = [
 ]
 
 def safe_number(v, is_rainfall=False):
+    """Clean OCR noise and validate numbers"""
     v = str(v).upper().replace("O", "0").replace("|", "1").replace("I", "1").replace("l", "1").strip()
     v = re.sub(r"[^\d.]", "", v)
     if not v:
@@ -33,15 +34,18 @@ def safe_number(v, is_rainfall=False):
         return ""
 
 def clean_station_name(name):
-    """Fix known bad OCR patterns"""
+    """Fix known bad OCR station name patterns"""
+    name = name.lower()
     if "mahalluppallama" in name:
         return "maha illuppallama"
     if "kattunayake" in name:
         return "katunayake"
+    # Add more custom corrections here if needed!
     return name
 
 def match_station(name):
-    name = clean_station_name(name.lower())
+    """Fuzzy match a station name with cleanup"""
+    name = clean_station_name(name)
     best = get_close_matches(name, [s.lower() for s in known_stations], n=1, cutoff=0.4)
     if best:
         for s in known_stations:
@@ -60,41 +64,39 @@ for date_folder in sorted(os.listdir(reports_folder)):
     pdf_path = os.path.join(folder_path, expected_pdf)
 
     print(f"\n📂 Checking: {folder_path}")
-    print(f"Files: {os.listdir(folder_path)}")
     print(f"Looking for: {expected_pdf} ➜ Exists: {os.path.exists(pdf_path)}")
 
     if not os.path.exists(pdf_path):
         print(f"⚠️ Skipping {date_folder}: PDF not found.")
         continue
 
-    # === Extract real date ===
+    # === Extract date ===
     with open(pdf_path, "rb") as f:
         reader = PyPDF2.PdfReader(f)
         page_text = reader.pages[0].extract_text()
         date_match = re.search(r"\d{4}\.\d{2}\.\d{2}", page_text)
-        if date_match:
-            actual_date = date_match.group(0).replace(".", "-")
-        else:
-            actual_date = date_folder.strip()
+        actual_date = date_match.group(0).replace(".", "-") if date_match else date_folder.strip()
     print(f"📅 Using date: {actual_date}")
 
     valid_max, valid_min, valid_rain = {}, {}, {}
 
     try:
+        # === Try Camelot stream ===
         tables = camelot.read_pdf(pdf_path, pages="1", flavor="stream")
         print(f"🔍 Stream tables: {len(tables)}")
 
+        # === Try Camelot lattice if needed ===
         if len(tables) == 0:
             print("⚠️ Trying lattice...")
             tables = camelot.read_pdf(pdf_path, pages="1", flavor="lattice")
             print(f"🔍 Lattice tables: {len(tables)}")
 
+        # === OCR fallback if still nothing ===
         if len(tables) == 0:
-            # === OCR fallback ===
             print("⚠️ Using OCR fallback...")
             images = convert_from_path(pdf_path, dpi=300)
             text = pytesseract.image_to_string(images[0], config='--psm 6')
-            print(f"🔍 OCR TEXT PREVIEW:\n{text[:500]}")
+            print(f"🔍 OCR TEXT PREVIEW:\n{text[:300]}...")
 
             lines = text.split("\n")
             for i, line in enumerate(lines):
@@ -110,7 +112,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
                         print(f"❌ OCR fallback - NO MATCH: {matches[-1].title()}")
                         continue
 
-                    # ✅ Check same line for numbers
+                    # ✅ Same line numbers
                     nums_inline = re.findall(r"\d+\.\d+", line)
                     if nums_inline:
                         max_val = min_val = rain_val = ""
@@ -125,8 +127,8 @@ for date_folder in sorted(os.listdir(reports_folder)):
                         print(f"✅ OCR SAME LINE: {possible_station} ➜ Max:{max_val} Min:{min_val} Rain:{rain_val}")
                         continue
 
-                    # ✅ Otherwise look ahead for next lines
-                    for offset in range(1, 4):  # Check next 3 lines
+                    # ✅ Look ahead in next 3 lines
+                    for offset in range(1, 4):
                         if i+offset < len(lines):
                             next_line = lines[i+offset].strip()
                             nums = re.findall(r"\d+\.\d+", next_line)
@@ -150,10 +152,8 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
                 if df.shape[1] >= 3:
                     df.columns = ["Station", "Max", "Min", "Rainfall"][:df.shape[1]]
-                    table_type = "Temperature"
                 elif df.shape[1] == 2:
                     df.columns = ["Station", "Rainfall"]
-                    table_type = "RainfallOnly"
                 else:
                     continue
 
@@ -167,18 +167,15 @@ for date_folder in sorted(os.listdir(reports_folder)):
                         print(f"❌ Camelot - NO MATCH: {station_raw}")
                         continue
 
-                    if table_type == "Temperature":
-                        max_val = safe_number(row["Max"], is_rainfall=False)
-                        min_val = safe_number(row["Min"], is_rainfall=False)
-                        rain_val = safe_number(row["Rainfall"], is_rainfall=True) if "Rainfall" in row else ""
-                        if max_val: valid_max[english_station] = max_val
-                        if min_val: valid_min[english_station] = min_val
-                        if rain_val: valid_rain[english_station] = rain_val
-                    elif table_type == "RainfallOnly":
-                        rain_val = safe_number(row["Rainfall"], is_rainfall=True)
-                        if rain_val: valid_rain[english_station] = rain_val
+                    max_val = safe_number(row.get("Max", ""), is_rainfall=False)
+                    min_val = safe_number(row.get("Min", ""), is_rainfall=False)
+                    rain_val = safe_number(row.get("Rainfall", ""), is_rainfall=True)
 
-        # === Always save 3 rows ===
+                    if max_val: valid_max[english_station] = max_val
+                    if min_val: valid_min[english_station] = min_val
+                    if rain_val: valid_rain[english_station] = rain_val
+
+        # === Always save rows ===
         row_max = {"Date": actual_date, "Type": "Max"}
         row_min = {"Date": actual_date, "Type": "Min"}
         row_rain = {"Date": actual_date, "Type": "Rainfall"}
@@ -190,7 +187,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
         print(f"✅ {actual_date}: Max={len(valid_max)}, Min={len(valid_min)}, Rainfall={len(valid_rain)}")
 
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"❌ Error processing {pdf_path}: {e}")
 
 # === FINAL SAVE ===
 if new_rows:
