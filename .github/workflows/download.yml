@@ -34,7 +34,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install camelot-py[cv] pdf2image pytesseract PyPDF2 selenium
 
       - name: Download and extract Chrome & ChromeDriver
         run: |
