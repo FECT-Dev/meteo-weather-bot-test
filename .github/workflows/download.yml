@@ -80,3 +80,4 @@ jobs:
           else
             git commit -m "Add weather report and update summary for $(date +%Y-%m-%d)"
             git push origin main
+          fi
