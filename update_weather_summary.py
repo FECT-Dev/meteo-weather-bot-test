@@ -78,33 +78,36 @@ for date_folder in sorted(os.listdir(reports_folder)):
             print("⚠️ Using OCR fallback...")
             images = convert_from_path(pdf_path, dpi=300)
             text = pytesseract.image_to_string(images[0], config='--psm 6')
-            print(f"🔍 OCR text preview:\n{text[:500]}")
+            print(f"🔍 OCR TEXT PREVIEW:\n{text[:500]}")
 
-            current_station = ""
-            for line in text.split("\n"):
+            lines = text.split("\n")
+            for i, line in enumerate(lines):
                 line = line.strip()
                 if not line:
                     continue
-                # If line has station
+
                 matches = re.findall(r"[A-Za-z]+", line)
-                if matches and len(matches[0]) > 2:
-                    current_station = matches[-1].title()
-                    continue
-                # If line has numbers
-                nums = re.findall(r"\d+\.\d+", line)
-                if current_station and nums:
-                    if current_station not in known_stations:
-                        current_station = ""
+                if matches:
+                    possible_station = matches[-1].title()
+                    if possible_station not in known_stations:
                         continue
-                    if len(nums) >= 2:
-                        max_val = safe_number(nums[0])
-                        min_val = safe_number(nums[1])
-                        if max_val: valid_max[current_station] = max_val
-                        if min_val: valid_min[current_station] = min_val
-                    if len(nums) >= 3:
-                        rain_val = safe_number(nums[2], is_rainfall=True)
-                        if rain_val: valid_rain[current_station] = rain_val
-                    current_station = ""
+                    # Look ahead for numbers in next 1–2 lines
+                    for offset in range(1, 3):
+                        if i+offset < len(lines):
+                            next_line = lines[i+offset].strip()
+                            nums = re.findall(r"\d+\.\d+", next_line)
+                            if nums:
+                                if len(nums) >= 2:
+                                    max_val = safe_number(nums[0])
+                                    min_val = safe_number(nums[1])
+                                    if max_val: valid_max[possible_station] = max_val
+                                    if min_val: valid_min[possible_station] = min_val
+                                if len(nums) >= 3:
+                                    rain_val = safe_number(nums[2], is_rainfall=True)
+                                    if rain_val: valid_rain[possible_station] = rain_val
+                                print(f"✅ OCR Match: {possible_station} ➜ Max:{max_val} Min:{min_val} Rain:{rain_val}")
+                                break
+
         else:
             for idx, table in enumerate(tables):
                 df = table.df
