@@ -1,4 +1,4 @@
-name: Daily Weather PDF Download
+name: Daily Weather PDF Download & Summary
 
 on:
   schedule:
@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository without token
+      - name: Checkout repository
         uses: actions/checkout@v3
         with:
           persist-credentials: false
@@ -26,13 +26,15 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Install system dependencies for Camelot & OCR
+      - name: Install system dependencies for Camelot, PDF2Image, and OCR
         run: |
           sudo apt-get update
-          sudo apt-get install -y ghostscript python3-tk tesseract-ocr poppler-utils
+          sudo apt-get install -y ghostscript python3-tk tesseract-ocr poppler-utils libtesseract-dev
 
       - name: Install Python dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install --upgrade pip
+          pip install camelot-py[cv] pdf2image pytesseract
 
       - name: Download and extract Chrome & ChromeDriver
         run: |
@@ -56,16 +58,16 @@ jobs:
             echo "⚠️ No PDF downloaded. Skipping move."
           fi
 
-      - name: Update summary table with Camelot + OCR
+      - name: Update weather summary with Camelot + OCR fallback
         run: python update_weather_summary.py
 
-      - name: Show Git status before commit (debug)
+      - name: Show Git status before commit
         run: |
           echo "🔍 Git status:"
           git status
           git diff --stat || true
 
-      - name: Commit and push ONLY necessary files
+      - name: Commit and push updated files
         env:
           TOKEN: ${{ secrets.ACTIONS_PAT }}
         run: |
@@ -78,4 +80,3 @@ jobs:
           else
             git commit -m "Add weather report and update summary for $(date +%Y-%m-%d)"
             git push origin main
-          fi
