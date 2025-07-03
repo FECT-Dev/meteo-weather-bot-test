@@ -34,8 +34,9 @@ def safe_number(v, is_rainfall=False):
         return ""
 
 def match_station(name):
+    """ Fuzzy match to known_stations with a wider net """
     name = name.lower()
-    best = get_close_matches(name, [s.lower() for s in known_stations], n=1, cutoff=0.6)
+    best = get_close_matches(name, [s.lower() for s in known_stations], n=1, cutoff=0.5)
     if best:
         for s in known_stations:
             if s.lower() == best[0]:
@@ -100,9 +101,10 @@ for date_folder in sorted(os.listdir(reports_folder)):
                     possible_station = matches[-1].title()
                     possible_station = match_station(possible_station)
                     if not possible_station:
+                        print(f"❌ OCR fallback - NO MATCH: {matches[-1].title()}")
                         continue
 
-                    for offset in range(1, 3):
+                    for offset in range(1, 4):  # Check next 3 lines
                         if i+offset < len(lines):
                             next_line = lines[i+offset].strip()
                             nums = re.findall(r"\d+\.\d+", next_line)
@@ -140,6 +142,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
                     english_station = match_station(english_station)
 
                     if not english_station:
+                        print(f"❌ Camelot - NO MATCH: {station_raw}")
                         continue
 
                     if table_type == "Temperature":
