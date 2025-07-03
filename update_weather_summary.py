@@ -110,6 +110,22 @@ for date_folder in sorted(os.listdir(reports_folder)):
                         print(f"❌ OCR fallback - NO MATCH: {matches[-1].title()}")
                         continue
 
+                    # ✅ Check same line for numbers
+                    nums_inline = re.findall(r"\d+\.\d+", line)
+                    if nums_inline:
+                        max_val = min_val = rain_val = ""
+                        if len(nums_inline) >= 2:
+                            max_val = safe_number(nums_inline[0])
+                            min_val = safe_number(nums_inline[1])
+                            if max_val: valid_max[possible_station] = max_val
+                            if min_val: valid_min[possible_station] = min_val
+                        if len(nums_inline) >= 3:
+                            rain_val = safe_number(nums_inline[2], is_rainfall=True)
+                            if rain_val: valid_rain[possible_station] = rain_val
+                        print(f"✅ OCR SAME LINE: {possible_station} ➜ Max:{max_val} Min:{min_val} Rain:{rain_val}")
+                        continue
+
+                    # ✅ Otherwise look ahead for next lines
                     for offset in range(1, 4):  # Check next 3 lines
                         if i+offset < len(lines):
                             next_line = lines[i+offset].strip()
