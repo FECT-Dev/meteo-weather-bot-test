@@ -26,7 +26,7 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Install system dependencies for Camelot, PDF2Image & OCR
+      - name: Install system dependencies for Camelot & OCR
         run: |
           sudo apt-get update
           sudo apt-get install -y ghostscript python3-tk tesseract-ocr poppler-utils libtesseract-dev
@@ -44,10 +44,10 @@ jobs:
           unzip chromedriver-linux64.zip
           chmod +x chrome-linux64/chrome chromedriver-linux64/chromedriver
 
-      - name: Run the download script
+      - name: Run the PDF download script
         run: python download_weather_pdf.py
 
-      - name: Move and rename the PDF
+      - name: Move and rename the PDF to reports/YYYY-MM-DD
         run: |
           TODAY=$(date +%Y-%m-%d)
           mkdir -p reports/$TODAY
@@ -58,7 +58,7 @@ jobs:
             echo "⚠️ No PDF downloaded. Skipping move."
           fi
 
-      - name: Update weather summary with Camelot + OCR fallback
+      - name: Update the weather summary CSV
         run: python update_weather_summary.py
 
       - name: Show Git status before commit
@@ -67,7 +67,7 @@ jobs:
           git status
           git diff --stat || true
 
-      - name: Commit and push updated files
+      - name: Commit and push updated weather report & summary
         env:
           TOKEN: ${{ secrets.ACTIONS_PAT }}
         run: |
@@ -80,4 +80,3 @@ jobs:
           else
             git commit -m "Add weather report and update summary for $(date +%Y-%m-%d)"
             git push origin main
-          fi
