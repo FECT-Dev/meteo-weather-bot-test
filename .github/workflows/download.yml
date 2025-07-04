@@ -6,37 +6,37 @@ on:
   workflow_dispatch:
 
 jobs:
-  download:
+  daily-weather:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: 📥 Checkout repository
         uses: actions/checkout@v3
         with:
           persist-credentials: false
 
-      - name: Set remote to use Personal Access Token
+      - name: 🔑 Set remote to use Personal Access Token
         env:
           TOKEN: ${{ secrets.ACTIONS_PAT }}
         run: |
           git remote set-url origin https://${TOKEN}@github.com/${{ github.repository }}
 
-      - name: Set up Python
+      - name: 🐍 Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.x'
 
-      - name: Install system dependencies for Camelot & OCR
+      - name: ⚙️ Install system dependencies for Camelot & OCR
         run: |
           sudo apt-get update
           sudo apt-get install -y ghostscript python3-tk tesseract-ocr poppler-utils libtesseract-dev
 
-      - name: Install Python dependencies
+      - name: 📦 Install Python dependencies
         run: |
           pip install --upgrade pip
           pip install camelot-py[cv] pdf2image pytesseract PyPDF2 selenium
 
-      - name: Download and extract Chrome & ChromeDriver
+      - name: 🗂️ Download and extract Chrome & ChromeDriver
         run: |
           wget https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/126.0.6478.126/linux64/chrome-linux64.zip
           wget https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/126.0.6478.126/linux64/chromedriver-linux64.zip
@@ -44,10 +44,10 @@ jobs:
           unzip chromedriver-linux64.zip
           chmod +x chrome-linux64/chrome chromedriver-linux64/chromedriver
 
-      - name: Run the PDF download script
+      - name: 📄 Run the PDF download script
         run: python download_weather_pdf.py
 
-      - name: Move and rename the PDF to reports/YYYY-MM-DD
+      - name: 🗃️ Move and rename the PDF to reports/YYYY-MM-DD
         run: |
           TODAY=$(date +%Y-%m-%d)
           mkdir -p reports/$TODAY
@@ -58,16 +58,19 @@ jobs:
             echo "⚠️ No PDF downloaded. Skipping move."
           fi
 
-      - name: Update the weather summary CSV
+      - name: 📊 Run weather summary extraction
         run: python update_weather_summary.py
 
-      - name: Show Git status before commit
+      - name: 📂 Show reports folder contents
+        run: ls -R reports/
+
+      - name: ✅ Show Git status before commit
         run: |
           echo "🔍 Git status:"
           git status
           git diff --stat || true
 
-      - name: Commit and push updated weather report & summary
+      - name: ✅ Commit & push updated weather report & summary
         env:
           TOKEN: ${{ secrets.ACTIONS_PAT }}
         run: |
@@ -80,4 +83,4 @@ jobs:
           else
             git commit -m "Add weather report and update summary for $(date +%Y-%m-%d)"
             git push origin main
-          fi  # ✅ <-- REQUIRED to close the 'if' statement
+          fi  # ✅ Closes the if properly!
