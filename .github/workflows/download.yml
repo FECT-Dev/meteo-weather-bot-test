@@ -58,11 +58,11 @@ jobs:
             echo "⚠️ No PDF downloaded. Skipping move."
           fi
 
-      - name: 📊 Run weather summary extraction
-        run: python update_weather_summary.py
-
       - name: 📂 Show reports folder contents
         run: ls -R reports/
+
+      - name: 📊 Run weather summary extraction
+        run: python update_weather_summary.py
 
       - name: ✅ Show Git status before commit
         run: |
@@ -83,4 +83,4 @@ jobs:
           else
             git commit -m "Add weather report and update summary for $(date +%Y-%m-%d)"
             git push origin main
-          fi  # ✅ Closes the if properly!
+          fi
