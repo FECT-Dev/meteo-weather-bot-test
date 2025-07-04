@@ -83,7 +83,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
             df = table.df
             debug_file = os.path.join(folder_path, f"debug_table_{idx}.csv")
             df.to_csv(debug_file, index=False)
-            print(f"✅ Saved: {debug_file}")
+            print(f"✅ Saved debug: {debug_file}")
 
             # Skip header rows
             if "Station" in df.iloc[0, 0] or "Meteorological" in df.iloc[0, 0]:
@@ -133,8 +133,14 @@ if new_rows:
         final_df = pd.concat([final_df, fallback_df], ignore_index=True)
         print(f"✅ Merged fallback.csv — {len(fallback_df)} rows.")
 
+    # ✅ Remove old rows for same date to force overwrite
+    final_df.sort_values(by="Date", inplace=True)
     final_df.drop_duplicates(subset=["Date", "Type"], keep="last", inplace=True)
     final_df.fillna("", inplace=True)
+
+    print("✅ Final rows:")
+    print(final_df.tail(5))
+
     final_df.to_csv(summary_file, index=False)
     print(f"✅ Saved: {summary_file} — {len(final_df)} rows")
 
