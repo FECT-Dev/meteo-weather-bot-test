@@ -24,7 +24,7 @@ def safe_number(v, is_rainfall=False):
         return "0.1"
     if v in ["-", "--"]:
         return "0.0"
-    v = v.replace("O","0").replace("|","1").replace("I","1").replace("l","1")
+    v = v.replace("O", "0").replace("|", "1").replace("I", "1").replace("l", "1")
     v = re.sub(r"[^\d.]", "", v)
     if not v or v == ".":
         return ""
@@ -57,7 +57,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
     print(f"\n📂 Processing: {pdf}")
 
-    actual_date = date_folder  # fallback if header missing
+    actual_date = date_folder
     try:
         with open(pdf, "rb") as f:
             reader = PyPDF2.PdfReader(f)
@@ -68,7 +68,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 published = datetime.strptime(header_date, "%Y-%m-%d")
                 shifted = published - timedelta(days=1)
                 actual_date = shifted.strftime("%Y-%m-%d")
-                print(f"📅 PDF date: {header_date} → Shifted: {actual_date}")
+                print(f"📅 PDF date: {header_date} → Shifted to: {actual_date}")
     except Exception as e:
         print(f"❌ Date parse error: {e}")
 
@@ -90,19 +90,28 @@ for date_folder in sorted(os.listdir(reports_folder)):
         df.to_csv(debug_file, index=False)
 
         for _, row in df.iterrows():
-            # Combine all cells to catch split lines
-            text_row = " ".join(str(cell) for cell in row).replace("\n"," ")
-            name_match = re.findall(r"[A-Za-z][A-Za-z ]+", text_row)
+            station_raw = str(row["Station"]) if "Station" in row else " ".join(str(c) for c in row)
+            name_match = re.findall(r"[A-Za-z][A-Za-z ]+", station_raw)
             station = match_station(name_match[-1].strip().title()) if name_match else ""
             if not station:
-                print(f"❌ NO MATCH: {text_row}")
+                print(f"❌ NO MATCH: {station_raw}")
                 continue
 
-            # Catch both decimals and integers
-            nums = re.findall(r"\d+\.\d+|\d+", text_row)
-            max_val = safe_number(nums[0]) if len(nums) >= 1 else ""
-            min_val = safe_number(nums[1]) if len(nums) >= 2 else ""
-            rain_val = safe_number(nums[2], is_rainfall=True) if len(nums) >= 3 else ""
+            # Try per-column first
+            max_val = safe_number(row["Max"]) if "Max" in row else ""
+            min_val = safe_number(row["Min"]) if "Min" in row else ""
+            rain_val = safe_number(row["Rainfall"], is_rainfall=True) if "Rainfall" in row else ""
+
+            # Fallback if cells empty
+            if not max_val or not min_val:
+                text_row = " ".join(str(c) for c in row)
+                nums = re.findall(r"\d+\.\d+|\d+", text_row)
+                if len(nums) >= 1 and not max_val:
+                    max_val = safe_number(nums[0])
+                if len(nums) >= 2 and not min_val:
+                    min_val = safe_number(nums[1])
+                if len(nums) >= 3 and not rain_val:
+                    rain_val = safe_number(nums[2], is_rainfall=True)
 
             if max_val: valid_max[station] = max_val
             if min_val: valid_min[station] = min_val
@@ -152,6 +161,5 @@ if new_rows:
 
     df.to_csv(summary_file, index=False)
     print(f"✅ Saved: {summary_file} — {len(df)} rows")
-
 else:
     print("⚠️ No rows added.")
