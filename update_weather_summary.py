@@ -18,6 +18,13 @@ known_stations = [
     "Mullaitivu"
 ]
 
+# Optional: fix common OCR errors
+station_aliases = {
+    "Maha llluppallama": "Maha Illuppallama",
+    "Ratmalana": "Rathmalana",
+    "Ratnapura": "Rathnapura",
+}
+
 def safe_number(v, is_rainfall=False):
     v = str(v).upper().strip()
     if "TR" in v or "Tr" in v or "TRACE" in v.lower():
@@ -37,6 +44,8 @@ def safe_number(v, is_rainfall=False):
         return ""
 
 def match_station(name):
+    if name in station_aliases:
+        return station_aliases[name]
     best = get_close_matches(name.lower(), [s.lower() for s in known_stations], n=1, cutoff=0.3)
     if best:
         for s in known_stations:
@@ -63,7 +72,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
             reader = PyPDF2.PdfReader(f)
             text = ""
             for page in reader.pages:
-                text += page.extract_text()
+                text += page.extract_text() or ""
             date_match = re.search(r"(\d{4}[./-]\d{2}[./-]\d{2})", text)
             if date_match:
                 header_date = date_match.group(0).replace("/", "-").replace(".", "-")
@@ -72,18 +81,24 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 actual_date = shifted.strftime("%Y-%m-%d")
                 print(f"📅 PDF date: {header_date} → Shifted to: {actual_date}")
             else:
-                print("⚠️ No date found in PDF header, using folder date.")
+                print("⚠️ No date found in PDF header, using folder date without shift.")
     except Exception as e:
         print(f"❌ Date parse error: {e}")
 
     valid_max, valid_min, valid_rain = {}, {}, {}
 
-    tables = camelot.read_pdf(pdf, pages="1", flavor="lattice")
-    if len(tables) == 0:
-        print("⚠️ Lattice gave nothing — trying stream...")
-        tables = camelot.read_pdf(pdf, pages="1", flavor="stream")
+    # Force stream mode with better edge tolerance
+    tables = camelot.read_pdf(
+        pdf,
+        pages="1",
+        flavor="stream",
+        edge_tol=500,
+        strip_text="\n"
+    )
 
     print(f"✅ Tables found: {len(tables)}")
+
+    unmatched_log = open(os.path.join(folder, "unmatched_stations.log"), "a")
 
     for idx, table in enumerate(tables):
         df = table.df
@@ -98,6 +113,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
             name_match = re.findall(r"[A-Za-z][A-Za-z ]+", station_raw)
             station = match_station(name_match[-1].strip().title()) if name_match else ""
             if not station:
+                unmatched_log.write(f"{date_folder} | NO MATCH: {station_raw}\n")
                 print(f"❌ NO MATCH: {station_raw}")
                 continue
 
@@ -108,6 +124,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
             if not max_val or not min_val or not rain_val:
                 text_row = " ".join(str(c) for c in row)
                 nums = re.findall(r"\d+\.?\d*|\.\d+", text_row)
+                print(f"⚡ Fallback nums for {station}: {nums}")
                 if len(nums) >= 1 and not max_val:
                     max_val = safe_number(nums[0])
                 if len(nums) >= 2 and not min_val:
@@ -120,6 +137,8 @@ for date_folder in sorted(os.listdir(reports_folder)):
             if rain_val: valid_rain[station] = rain_val
 
             print(f"✅ {station} ➜ Max:{max_val} Min:{min_val} Rain:{rain_val}")
+
+    unmatched_log.close()
 
     row_max = {"Date": actual_date, "Type": "Max"}
     row_min = {"Date": actual_date, "Type": "Min"}
