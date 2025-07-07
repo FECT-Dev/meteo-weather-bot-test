@@ -6,7 +6,6 @@ import PyPDF2
 from difflib import get_close_matches
 from datetime import datetime, timedelta
 
-# === CONFIG ===
 reports_folder = "reports"
 summary_file = "weather_summary.csv"
 
@@ -19,7 +18,7 @@ known_stations = [
 ]
 
 def safe_number(v, is_rainfall=False):
-    v = str(v).upper().replace("O", "0").replace("|", "1").replace("I", "1").replace("l", "1").strip()
+    v = str(v).upper().replace("O","0").replace("|","1").replace("I","1").replace("l","1").strip()
     v = re.sub(r"[^\d.]", "", v)
     if not v or v == ".":
         return ""
@@ -52,7 +51,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
     print(f"\n📂 Processing: {pdf}")
 
-    actual_date = date_folder  # fallback
+    actual_date = date_folder
     with open(pdf, "rb") as f:
         reader = PyPDF2.PdfReader(f)
         text = reader.pages[0].extract_text()
@@ -64,11 +63,9 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 published = datetime.strptime(header_date, "%Y-%m-%d")
                 shifted = published - timedelta(days=1)
                 actual_date = shifted.strftime("%Y-%m-%d")
-                print(f"📅 PDF header date: {header_date} → Shifted to previous date: {actual_date}")
+                print(f"📅 PDF date: {header_date} → Shifted: {actual_date}")
             except Exception as e:
                 print(f"❌ Date parse error: {e}")
-        else:
-            print(f"⚠️ No header date found, using folder name: {actual_date}")
 
     valid_max, valid_min, valid_rain = {}, {}, {}
 
@@ -83,40 +80,28 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
         df = df[df.iloc[:, 0].str.strip() != ""]
         df = df[~df.iloc[:, 0].str.contains("Station|Meteorological", case=False, na=False)]
-        df = df.dropna(axis=1, how="all")
-        df = df.loc[:, ~(df == "").all()]
-
-        if df.shape[1] >= 4:
-            df = df.iloc[:, :4]
-            df.columns = ["Station", "Max", "Min", "Rainfall"]
-        elif df.shape[1] == 3:
-            df.columns = ["Station", "Max", "Min"]
-        elif df.shape[1] == 2:
-            df.columns = ["Station", "Rainfall"]
-        else:
-            print(f"⚠️ Skipping table {idx}: Unexpected columns ({df.shape[1]})")
-            continue
 
         debug_file = os.path.join(folder, f"debug_table_{idx}.csv")
         df.to_csv(debug_file, index=False)
-        print(f"📄 Saved debug: {debug_file}")
 
         for _, row in df.iterrows():
-            name = re.findall(r"[A-Za-z][A-Za-z ]+", str(row["Station"]))
-            s = match_station(name[-1].strip().title()) if name else ""
-            if not s:
-                print(f"❌ NO MATCH: {row['Station']}")
+            text_row = " ".join(row)
+            name_match = re.findall(r"[A-Za-z][A-Za-z ]+", text_row)
+            station = match_station(name_match[-1].strip().title()) if name_match else ""
+            if not station:
+                print(f"❌ NO MATCH: {text_row}")
                 continue
 
-            max_val = safe_number(row.get("Max", ""))
-            min_val = safe_number(row.get("Min", ""))
-            rain_val = safe_number(row.get("Rainfall", ""), is_rainfall=True)
+            nums = re.findall(r"\d+\.\d+", text_row)
+            max_val = safe_number(nums[0]) if len(nums) >= 1 else ""
+            min_val = safe_number(nums[1]) if len(nums) >= 2 else ""
+            rain_val = safe_number(nums[2], is_rainfall=True) if len(nums) >= 3 else ""
 
-            if max_val: valid_max[s] = max_val
-            if min_val: valid_min[s] = min_val
-            if rain_val: valid_rain[s] = rain_val
+            valid_max[station] = max_val if max_val else valid_max.get(station, "")
+            valid_min[station] = min_val if min_val else valid_min.get(station, "")
+            valid_rain[station] = rain_val if rain_val else valid_rain.get(station, "")
 
-            print(f"✅ {s} ➜ Max:{max_val} Min:{min_val} Rainfall:{rain_val}")
+            print(f"✅ {station} ➜ Max:{max_val} Min:{min_val} Rain:{rain_val}")
 
     row_max = {"Date": actual_date, "Type": "Max"}
     row_min = {"Date": actual_date, "Type": "Min"}
