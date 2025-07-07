@@ -56,13 +56,16 @@ for date_folder in sorted(os.listdir(reports_folder)):
         reader = PyPDF2.PdfReader(f)
         txt = reader.pages[0].extract_text()
         date_match = re.search(r"\d{4}\.\d{2}\.\d{2}", txt)
+
         if date_match:
             header_date = date_match.group(0).replace(".", "-")
             published = datetime.strptime(header_date, "%Y-%m-%d")
             shifted = published - timedelta(days=1)
             actual_date = shifted.strftime("%Y-%m-%d")
+            print(f"📅 Found header date: {header_date} → Using shifted date: {actual_date}")
         else:
             actual_date = date_folder
+            print(f"⚠️ No header date found, using folder name: {actual_date}")
 
     valid_max, valid_min, valid_rain = {}, {}, {}
 
@@ -77,8 +80,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
         df = df[~df.iloc[:, 0].str.contains("Station|Meteorological", case=False, na=False)]
         df = df.dropna(axis=1, how="all")
         df = df.loc[:, ~(df == "").all()]
-
-        print(f"✅ Table shape after cleanup: {df.shape}")
+        print(f"✅ Table {idx} shape after cleanup: {df.shape}")
 
         if df.shape[1] >= 4:
             df = df.iloc[:, :4]
@@ -93,7 +95,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
         debug_file = os.path.join(folder, f"debug_table_{idx}.csv")
         df.to_csv(debug_file, index=False)
-        print(f"📄 Saved debug: {debug_file}")
+        print(f"📄 Saved debug table: {debug_file}")
 
         for _, row in df.iterrows():
             name = re.findall(r"[A-Za-z][A-Za-z ]+", str(row["Station"]))
