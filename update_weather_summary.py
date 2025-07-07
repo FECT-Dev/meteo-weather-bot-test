@@ -52,7 +52,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
     print(f"\n📂 Processing: {pdf}")
 
-    # === Extract and shift PDF date ===
+    # === Extract date from PDF and shift it back 1 day ===
     with open(pdf, "rb") as f:
         reader = PyPDF2.PdfReader(f)
         txt = reader.pages[0].extract_text()
@@ -63,10 +63,10 @@ for date_folder in sorted(os.listdir(reports_folder)):
             published = datetime.strptime(header_date, "%Y-%m-%d")
             shifted = published - timedelta(days=1)
             actual_date = shifted.strftime("%Y-%m-%d")
-            print(f"📅 PDF date: {header_date} → Shifted to: {actual_date}")
+            print(f"📅 PDF shows: {header_date} ➜ Shifted to: {actual_date}")
         else:
             actual_date = date_folder
-            print(f"⚠️ No header date found, using folder date: {actual_date}")
+            print(f"⚠️ No header date found, using folder: {actual_date}")
 
     valid_max, valid_min, valid_rain = {}, {}, {}
 
@@ -150,12 +150,10 @@ if new_rows:
     stats = df.apply(compute_stats, axis=1)
     df = pd.concat([df, stats], axis=1)
 
-    # ✅ Merge with existing and drop duplicates!
     if os.path.exists(summary_file):
         old_df = pd.read_csv(summary_file)
         df = pd.concat([old_df, df], ignore_index=True)
-
-    df.drop_duplicates(subset=["Date", "Type"], keep="last", inplace=True)
+        df.drop_duplicates(subset=["Date", "Type"], keep="last", inplace=True)
 
     df.to_csv(summary_file, index=False)
     print(f"✅ Saved: {summary_file} — {len(df)} rows")
