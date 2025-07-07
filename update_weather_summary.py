@@ -6,6 +6,7 @@ import PyPDF2
 from difflib import get_close_matches
 from datetime import datetime, timedelta
 
+# === CONFIG ===
 reports_folder = "reports"
 summary_file = "weather_summary.csv"
 
@@ -18,7 +19,12 @@ known_stations = [
 ]
 
 def safe_number(v, is_rainfall=False):
-    v = str(v).upper().replace("O","0").replace("|","1").replace("I","1").replace("l","1").strip()
+    v = str(v).upper().strip()
+    if "TR" in v:
+        return "0.1"
+    if v in ["-", "--"]:
+        return "0.0"
+    v = v.replace("O","0").replace("|","1").replace("I","1").replace("l","1")
     v = re.sub(r"[^\d.]", "", v)
     if not v or v == ".":
         return ""
@@ -31,7 +37,7 @@ def safe_number(v, is_rainfall=False):
         return ""
 
 def match_station(name):
-    best = get_close_matches(name.lower(), [s.lower() for s in known_stations], n=1, cutoff=0.5)
+    best = get_close_matches(name.lower(), [s.lower() for s in known_stations], n=1, cutoff=0.4)
     if best:
         for s in known_stations:
             if s.lower() == best[0]:
@@ -77,7 +83,6 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
     for idx, table in enumerate(tables):
         df = table.df
-
         df = df[df.iloc[:, 0].str.strip() != ""]
         df = df[~df.iloc[:, 0].str.contains("Station|Meteorological", case=False, na=False)]
 
@@ -97,9 +102,9 @@ for date_folder in sorted(os.listdir(reports_folder)):
             min_val = safe_number(nums[1]) if len(nums) >= 2 else ""
             rain_val = safe_number(nums[2], is_rainfall=True) if len(nums) >= 3 else ""
 
-            valid_max[station] = max_val if max_val else valid_max.get(station, "")
-            valid_min[station] = min_val if min_val else valid_min.get(station, "")
-            valid_rain[station] = rain_val if rain_val else valid_rain.get(station, "")
+            if max_val: valid_max[station] = max_val
+            if min_val: valid_min[station] = min_val
+            if rain_val: valid_rain[station] = rain_val
 
             print(f"✅ {station} ➜ Max:{max_val} Min:{min_val} Rain:{rain_val}")
 
@@ -145,6 +150,5 @@ if new_rows:
 
     df.to_csv(summary_file, index=False)
     print(f"✅ Saved: {summary_file} — {len(df)} rows")
-
 else:
     print("⚠️ No rows added.")
