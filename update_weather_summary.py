@@ -19,7 +19,7 @@ known_stations = [
 ]
 
 def safe_number(v, is_rainfall=False):
-    v = str(v).upper().replace("O", "0").replace("|", "1").replace("I", "1").replace("l", "1").strip()
+    v = str(v).upper().replace("O","0").replace("|","1").replace("I","1").replace("l","1").strip()
     v = re.sub(r"[^\d.]", "", v)
     if not v:
         return ""
@@ -50,12 +50,13 @@ for date_folder in sorted(os.listdir(reports_folder)):
     if not os.path.exists(pdf):
         continue
 
-    print(f"📂 Processing {pdf}")
+    print(f"\n📂 Processing: {pdf}")
 
     with open(pdf, "rb") as f:
         reader = PyPDF2.PdfReader(f)
         txt = reader.pages[0].extract_text()
         date_match = re.search(r"\d{4}\.\d{2}\.\d{2}", txt)
+
         if date_match:
             header_date = date_match.group(0).replace(".", "-")
             published = datetime.strptime(header_date, "%Y-%m-%d")
@@ -64,22 +65,23 @@ for date_folder in sorted(os.listdir(reports_folder)):
             print(f"📅 Header date: {header_date} → Used shifted date: {actual_date}")
         else:
             actual_date = date_folder
-            print(f"⚠️ No header date found, fallback to folder date: {actual_date}")
+            print(f"⚠️ No header date found → fallback to folder date: {actual_date}")
 
     valid_max, valid_min, valid_rain = {}, {}, {}
 
     tables = camelot.read_pdf(pdf, pages="1", flavor="lattice")
     if len(tables) == 0:
         tables = camelot.read_pdf(pdf, pages="1", flavor="stream")
+
     print(f"✅ Tables found: {len(tables)}")
 
     for idx, table in enumerate(tables):
         df = table.df
+
         df = df[df.iloc[:, 0].str.strip() != ""]
         df = df[~df.iloc[:, 0].str.contains("Station|Meteorological", case=False, na=False)]
         df = df.dropna(axis=1, how="all")
         df = df.loc[:, ~(df == "").all()]
-        print(f"✅ Cleaned table shape: {df.shape}")
 
         if df.shape[1] >= 4:
             df = df.iloc[:, :4]
@@ -115,7 +117,6 @@ for date_folder in sorted(os.listdir(reports_folder)):
     row_max = {"Date": actual_date, "Type": "Max"}
     row_min = {"Date": actual_date, "Type": "Min"}
     row_rain = {"Date": actual_date, "Type": "Rainfall"}
-
     for s in known_stations:
         row_max[s] = valid_max.get(s, "")
         row_min[s] = valid_min.get(s, "")
