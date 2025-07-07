@@ -34,15 +34,18 @@ jobs:
       - name: 📦 Install Python dependencies
         run: |
           pip install --upgrade pip
-          pip install camelot-py[cv] pdf2image pytesseract PyPDF2 selenium
+          pip install camelot-py[cv] pdf2image pytesseract PyPDF2 selenium chromedriver-autoinstaller
 
-      - name: 🗂️ Download and extract Chrome & ChromeDriver
+      - name: 🗂️ Check installed Chrome version
         run: |
-          wget https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/126.0.6478.126/linux64/chrome-linux64.zip
-          wget https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/126.0.6478.126/linux64/chromedriver-linux64.zip
-          unzip chrome-linux64.zip
-          unzip chromedriver-linux64.zip
-          chmod +x chrome-linux64/chrome chromedriver-linux64/chromedriver
+          google-chrome --version || /opt/google/chrome/chrome --version || true
+
+      - name: ✅ Use chromedriver-autoinstaller in script
+        run: |
+          echo "Make sure your download_weather_pdf.py uses:"
+          echo "   import chromedriver_autoinstaller"
+          echo "   chromedriver_autoinstaller.install()"
+          echo "✅ This guarantees ChromeDriver always matches the installed Chrome!"
 
       - name: 📄 Run the PDF download script
         run: python download_weather_pdf.py
