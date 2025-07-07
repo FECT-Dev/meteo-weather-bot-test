@@ -57,21 +57,21 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
     print(f"\n📂 Processing: {pdf}")
 
-    actual_date = date_folder
-    with open(pdf, "rb") as f:
-        reader = PyPDF2.PdfReader(f)
-        text = reader.pages[0].extract_text()
-        date_match = re.search(r"\d{4}\.\d{2}\.\d{2}", text)
-
-        if date_match:
-            header_date = date_match.group(0).replace(".", "-")
-            try:
+    # === Extract and shift PDF date ===
+    actual_date = date_folder  # fallback if no header
+    try:
+        with open(pdf, "rb") as f:
+            reader = PyPDF2.PdfReader(f)
+            text = reader.pages[0].extract_text()
+            date_match = re.search(r"\d{4}\.\d{2}\.\d{2}", text)
+            if date_match:
+                header_date = date_match.group(0).replace(".", "-")
                 published = datetime.strptime(header_date, "%Y-%m-%d")
                 shifted = published - timedelta(days=1)
                 actual_date = shifted.strftime("%Y-%m-%d")
-                print(f"📅 PDF date: {header_date} → Shifted: {actual_date}")
-            except Exception as e:
-                print(f"❌ Date parse error: {e}")
+                print(f"📅 PDF date: {header_date} → Shifted to: {actual_date}")
+    except Exception as e:
+        print(f"❌ Date extraction failed: {e}")
 
     valid_max, valid_min, valid_rain = {}, {}, {}
 
@@ -90,14 +90,15 @@ for date_folder in sorted(os.listdir(reports_folder)):
         df.to_csv(debug_file, index=False)
 
         for _, row in df.iterrows():
-            text_row = " ".join(row)
+            text_row = " ".join(row).replace("\n"," ")
             name_match = re.findall(r"[A-Za-z][A-Za-z ]+", text_row)
             station = match_station(name_match[-1].strip().title()) if name_match else ""
             if not station:
                 print(f"❌ NO MATCH: {text_row}")
                 continue
 
-            nums = re.findall(r"\d+\.\d+", text_row)
+            # Match both decimals and integers
+            nums = re.findall(r"\d+\.\d+|\d+", text_row)
             max_val = safe_number(nums[0]) if len(nums) >= 1 else ""
             min_val = safe_number(nums[1]) if len(nums) >= 2 else ""
             rain_val = safe_number(nums[2], is_rainfall=True) if len(nums) >= 3 else ""
@@ -150,5 +151,6 @@ if new_rows:
 
     df.to_csv(summary_file, index=False)
     print(f"✅ Saved: {summary_file} — {len(df)} rows")
+
 else:
     print("⚠️ No rows added.")
