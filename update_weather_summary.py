@@ -19,9 +19,9 @@ known_stations = [
 ]
 
 def safe_number(v, is_rainfall=False):
-    v = str(v).upper().replace("O","0").replace("|","1").replace("I","1").replace("l","1").strip()
+    v = str(v).upper().replace("O", "0").replace("|", "1").replace("I", "1").replace("l", "1").strip()
     v = re.sub(r"[^\d.]", "", v)
-    if not v:
+    if not v or v == ".":
         return ""
     try:
         f = float(v)
@@ -52,7 +52,6 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
     print(f"\n📂 Processing: {pdf}")
 
-    # === Extract and shift PDF date ===
     actual_date = date_folder  # fallback
     with open(pdf, "rb") as f:
         reader = PyPDF2.PdfReader(f)
@@ -65,7 +64,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 published = datetime.strptime(header_date, "%Y-%m-%d")
                 shifted = published - timedelta(days=1)
                 actual_date = shifted.strftime("%Y-%m-%d")
-                print(f"📅 PDF date: {header_date} → Shifted to: {actual_date}")
+                print(f"📅 PDF header date: {header_date} → Shifted to previous date: {actual_date}")
             except Exception as e:
                 print(f"❌ Date parse error: {e}")
         else:
@@ -100,6 +99,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
         debug_file = os.path.join(folder, f"debug_table_{idx}.csv")
         df.to_csv(debug_file, index=False)
+        print(f"📄 Saved debug: {debug_file}")
 
         for _, row in df.iterrows():
             name = re.findall(r"[A-Za-z][A-Za-z ]+", str(row["Station"]))
@@ -108,17 +108,16 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 print(f"❌ NO MATCH: {row['Station']}")
                 continue
 
-            if "Max" in row:
-                val = safe_number(row["Max"])
-                if val: valid_max[s] = val
-            if "Min" in row:
-                val = safe_number(row["Min"])
-                if val: valid_min[s] = val
-            if "Rainfall" in row:
-                val = safe_number(row["Rainfall"], is_rainfall=True)
-                if val: valid_rain[s] = val
+            max_val = safe_number(row.get("Max", ""))
+            min_val = safe_number(row.get("Min", ""))
+            rain_val = safe_number(row.get("Rainfall", ""), is_rainfall=True)
 
-    # ✅ Always use shifted date!
+            if max_val: valid_max[s] = max_val
+            if min_val: valid_min[s] = min_val
+            if rain_val: valid_rain[s] = rain_val
+
+            print(f"✅ {s} ➜ Max:{max_val} Min:{min_val} Rainfall:{rain_val}")
+
     row_max = {"Date": actual_date, "Type": "Max"}
     row_min = {"Date": actual_date, "Type": "Min"}
     row_rain = {"Date": actual_date, "Type": "Rainfall"}
