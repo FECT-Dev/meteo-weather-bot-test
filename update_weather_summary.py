@@ -4,7 +4,7 @@ import pandas as pd
 import camelot
 import PyPDF2
 from difflib import get_close_matches
-from datetime import datetime, timedelta  # ✅ Date shift
+from datetime import datetime, timedelta
 
 # === CONFIG ===
 reports_folder = "reports"
@@ -56,13 +56,13 @@ for date_folder in sorted(os.listdir(reports_folder)):
         reader = PyPDF2.PdfReader(f)
         txt = reader.pages[0].extract_text()
         date_match = re.search(r"\d{4}\.\d{2}\.\d{2}", txt)
-        actual_date = date_match.group(0).replace(".", "-") if date_match else date_folder
-
-        # ✅ Shift the PDF published date back by 1 day
         if date_match:
-            published = datetime.strptime(actual_date, "%Y-%m-%d")
+            header_date = date_match.group(0).replace(".", "-")
+            published = datetime.strptime(header_date, "%Y-%m-%d")
             shifted = published - timedelta(days=1)
             actual_date = shifted.strftime("%Y-%m-%d")
+        else:
+            actual_date = date_folder
 
     valid_max, valid_min, valid_rain = {}, {}, {}
 
@@ -73,12 +73,11 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
     for idx, table in enumerate(tables):
         df = table.df
-
         df = df[df.iloc[:, 0].str.strip() != ""]
         df = df[~df.iloc[:, 0].str.contains("Station|Meteorological", case=False, na=False)]
-
         df = df.dropna(axis=1, how="all")
         df = df.loc[:, ~(df == "").all()]
+
         print(f"✅ Table shape after cleanup: {df.shape}")
 
         if df.shape[1] >= 4:
@@ -94,7 +93,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
         debug_file = os.path.join(folder, f"debug_table_{idx}.csv")
         df.to_csv(debug_file, index=False)
-        print(f"📄 Saved: {debug_file}")
+        print(f"📄 Saved debug: {debug_file}")
 
         for _, row in df.iterrows():
             name = re.findall(r"[A-Za-z][A-Za-z ]+", str(row["Station"]))
@@ -127,7 +126,6 @@ if new_rows:
     df = pd.DataFrame(new_rows)
     df = df.reindex(columns=["Date", "Type"] + known_stations)
 
-    # ✅ Add Average, Max, Min per row
     def compute_stats(row):
         nums = []
         for s in known_stations:
@@ -148,6 +146,6 @@ if new_rows:
     df = pd.concat([df, stats], axis=1)
 
     df.to_csv(summary_file, index=False)
-    print(f"✅ Updated: {summary_file} — {len(df)} rows")
+    print(f"✅ Saved: {summary_file} — {len(df)} rows")
 else:
     print("⚠️ No rows added.")
