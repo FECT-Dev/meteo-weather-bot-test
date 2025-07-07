@@ -66,7 +66,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
             print(f"📅 PDF date: {header_date} → Shifted to: {actual_date}")
         else:
             actual_date = date_folder
-            print(f"⚠️ No header date found, using folder: {actual_date}")
+            print(f"⚠️ No header date found, using folder date: {actual_date}")
 
     valid_max, valid_min, valid_rain = {}, {}, {}
 
@@ -118,6 +118,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
     row_max = {"Date": actual_date, "Type": "Max"}
     row_min = {"Date": actual_date, "Type": "Min"}
     row_rain = {"Date": actual_date, "Type": "Rainfall"}
+
     for s in known_stations:
         row_max[s] = valid_max.get(s, "")
         row_min[s] = valid_min.get(s, "")
@@ -130,7 +131,6 @@ if new_rows:
     df = pd.DataFrame(new_rows)
     df = df.reindex(columns=["Date", "Type"] + known_stations)
 
-    # ✅ Add Average, Max, Min per row
     def compute_stats(row):
         nums = []
         for s in known_stations:
@@ -150,13 +150,15 @@ if new_rows:
     stats = df.apply(compute_stats, axis=1)
     df = pd.concat([df, stats], axis=1)
 
-    # ✅ Drop duplicate rows for Date+Type
+    # ✅ Merge with existing and drop duplicates!
     if os.path.exists(summary_file):
         old_df = pd.read_csv(summary_file)
         df = pd.concat([old_df, df], ignore_index=True)
-        df.drop_duplicates(subset=["Date", "Type"], keep="last", inplace=True)
+
+    df.drop_duplicates(subset=["Date", "Type"], keep="last", inplace=True)
 
     df.to_csv(summary_file, index=False)
     print(f"✅ Saved: {summary_file} — {len(df)} rows")
+
 else:
     print("⚠️ No rows added.")
