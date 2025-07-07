@@ -52,6 +52,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
     print(f"\n📂 Processing: {pdf}")
 
+    # === Extract and shift PDF date ===
     with open(pdf, "rb") as f:
         reader = PyPDF2.PdfReader(f)
         txt = reader.pages[0].extract_text()
@@ -62,10 +63,10 @@ for date_folder in sorted(os.listdir(reports_folder)):
             published = datetime.strptime(header_date, "%Y-%m-%d")
             shifted = published - timedelta(days=1)
             actual_date = shifted.strftime("%Y-%m-%d")
-            print(f"📅 Header date: {header_date} → Used shifted date: {actual_date}")
+            print(f"📅 PDF date: {header_date} → Shifted to: {actual_date}")
         else:
             actual_date = date_folder
-            print(f"⚠️ No header date found → fallback to folder date: {actual_date}")
+            print(f"⚠️ No header date found, using folder: {actual_date}")
 
     valid_max, valid_min, valid_rain = {}, {}, {}
 
