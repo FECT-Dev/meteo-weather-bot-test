@@ -20,7 +20,7 @@ known_stations = [
 
 def safe_number(v, is_rainfall=False):
     v = str(v).upper().strip()
-    if "TR" in v:
+    if "TR" in v or "Tr" in v or "TRACE" in v.lower():
         return "0.1"
     if v in ["-", "--"]:
         return "0.0"
@@ -37,7 +37,7 @@ def safe_number(v, is_rainfall=False):
         return ""
 
 def match_station(name):
-    best = get_close_matches(name.lower(), [s.lower() for s in known_stations], n=1, cutoff=0.4)
+    best = get_close_matches(name.lower(), [s.lower() for s in known_stations], n=1, cutoff=0.3)
     if best:
         for s in known_stations:
             if s.lower() == best[0]:
@@ -61,14 +61,18 @@ for date_folder in sorted(os.listdir(reports_folder)):
     try:
         with open(pdf, "rb") as f:
             reader = PyPDF2.PdfReader(f)
-            text = reader.pages[0].extract_text()
-            date_match = re.search(r"\d{4}\.\d{2}\.\d{2}", text)
+            text = ""
+            for page in reader.pages:
+                text += page.extract_text()
+            date_match = re.search(r"(\d{4}[./-]\d{2}[./-]\d{2})", text)
             if date_match:
-                header_date = date_match.group(0).replace(".", "-")
+                header_date = date_match.group(0).replace("/", "-").replace(".", "-")
                 published = datetime.strptime(header_date, "%Y-%m-%d")
                 shifted = published - timedelta(days=1)
                 actual_date = shifted.strftime("%Y-%m-%d")
                 print(f"📅 PDF date: {header_date} → Shifted to: {actual_date}")
+            else:
+                print("⚠️ No date found in PDF header, using folder date.")
     except Exception as e:
         print(f"❌ Date parse error: {e}")
 
@@ -97,15 +101,13 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 print(f"❌ NO MATCH: {station_raw}")
                 continue
 
-            # Try per-column first
             max_val = safe_number(row["Max"]) if "Max" in row else ""
             min_val = safe_number(row["Min"]) if "Min" in row else ""
             rain_val = safe_number(row["Rainfall"], is_rainfall=True) if "Rainfall" in row else ""
 
-            # Fallback if cells empty
-            if not max_val or not min_val:
+            if not max_val or not min_val or not rain_val:
                 text_row = " ".join(str(c) for c in row)
-                nums = re.findall(r"\d+\.\d+|\d+", text_row)
+                nums = re.findall(r"\d+\.?\d*|\.\d+", text_row)
                 if len(nums) >= 1 and not max_val:
                     max_val = safe_number(nums[0])
                 if len(nums) >= 2 and not min_val:
