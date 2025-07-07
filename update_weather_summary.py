@@ -4,6 +4,7 @@ import pandas as pd
 import camelot
 import PyPDF2
 from difflib import get_close_matches
+from datetime import datetime, timedelta  # ✅ Needed for date shift
 
 # === CONFIG ===
 reports_folder = "reports"
@@ -56,6 +57,12 @@ for date_folder in sorted(os.listdir(reports_folder)):
         txt = reader.pages[0].extract_text()
         date_match = re.search(r"\d{4}\.\d{2}\.\d{2}", txt)
         actual_date = date_match.group(0).replace(".", "-") if date_match else date_folder
+
+        # ✅ Shift the date back by 1 day
+        if date_match:
+            published = datetime.strptime(actual_date, "%Y-%m-%d")
+            shifted = published - timedelta(days=1)
+            actual_date = shifted.strftime("%Y-%m-%d")
 
     valid_max, valid_min, valid_rain = {}, {}, {}
 
