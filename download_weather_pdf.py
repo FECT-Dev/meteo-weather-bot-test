@@ -8,9 +8,9 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+import shutil
 
 # === CONFIG ===
-temp_user_data_dir = tempfile.mkdtemp()
 today = datetime.now().strftime('%Y-%m-%d')
 download_path = os.path.join(os.getcwd(), "downloads", today)
 os.makedirs(download_path, exist_ok=True)
@@ -24,6 +24,10 @@ chrome_options.add_experimental_option("prefs", {
     "plugins.always_open_pdf_externally": True
 })
 
+# Temporary profile (prevents permission issues)
+temp_user_data_dir = tempfile.mkdtemp()
+chrome_options.add_argument(f"--user-data-dir={temp_user_data_dir}")
+
 driver = webdriver.Chrome(
     service=Service("./chromedriver-linux64/chromedriver"),
     options=chrome_options
@@ -33,6 +37,7 @@ try:
     driver.get("https://meteo.gov.lk/")
     wait = WebDriverWait(driver, 20)
 
+    # Switch language
     try:
         english_link = wait.until(EC.element_to_be_clickable((By.LINK_TEXT, "English")))
         english_link.click()
@@ -40,30 +45,33 @@ try:
     except Exception as e:
         print("⚠️ Failed to switch language:", e)
 
+    # Click Weather Data
     weather_data_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Weather Data')]")))
     weather_data_button.click()
 
+    # Click PDF link
     pdf_link = wait.until(EC.element_to_be_clickable((By.LINK_TEXT, "Weather Report for the 24hour Period")))
     pdf_link.click()
 
+    print("⏳ Waiting for download to complete...")
     time.sleep(10)
 
 finally:
     driver.quit()
 
-print(f"✅ Downloaded to: {download_path}")
-print(f"📂 Files in download path: {os.listdir(download_path)}")
+print(f"✅ Download complete to: {download_path}")
+print(f"📂 Files: {os.listdir(download_path)}")
 
-# === Move to reports/YYYY-MM-DD/ ===
+# === MOVE to reports/YYYY-MM-DD/weather-YYYY-MM-DD.pdf ===
 today_folder = os.path.join("reports", today)
 os.makedirs(today_folder, exist_ok=True)
 
-downloaded_files = [f for f in os.listdir(download_path) if f.endswith(".pdf")]
-if downloaded_files:
-    for file in downloaded_files:
+pdf_files = [f for f in os.listdir(download_path) if f.endswith(".pdf")]
+if pdf_files:
+    for file in pdf_files:
         src = os.path.join(download_path, file)
         dst = os.path.join(today_folder, f"weather-{today}.pdf")
-        os.rename(src, dst)
-    print(f"✅ Moved PDF to: {today_folder}")
+        shutil.move(src, dst)
+    print(f"✅ PDF moved to {today_folder} as weather-{today}.pdf")
 else:
     print("⚠️ No PDF found to move.")
