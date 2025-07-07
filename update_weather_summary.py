@@ -18,7 +18,7 @@ known_stations = [
     "Mullaitivu"
 ]
 
-# ✅ Optional: fix common OCR errors
+# ✅ Fix common OCR spelling issues
 station_aliases = {
     "Maha llluppallama": "Maha Illuppallama",
     "Ratmalana": "Rathmalana",
@@ -27,7 +27,7 @@ station_aliases = {
 
 def safe_number(v, is_rainfall=False):
     v = str(v).upper().strip()
-    if "TR" in v or "Tr" in v or "TRACE" in v.lower():
+    if "TR" in v or "TRACE" in v.lower():
         return "0.1"
     if v in ["-", "--"]:
         return "0.0"
@@ -71,9 +71,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
     try:
         with open(pdf, "rb") as f:
             reader = PyPDF2.PdfReader(f)
-            text = ""
-            for page in reader.pages:
-                text += page.extract_text() or ""
+            text = "".join(page.extract_text() or "" for page in reader.pages)
             date_match = re.search(r"(\d{4}[./-]\d{2}[./-]\d{2})", text)
             if date_match:
                 header_date = date_match.group(0).replace("/", "-").replace(".", "-")
@@ -82,7 +80,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 actual_date = shifted.strftime("%Y-%m-%d")
                 print(f"📅 PDF date: {header_date} → Shifted to: {actual_date}")
             else:
-                print("⚠️ No date found in PDF header, using folder date without shift.")
+                print("⚠️ No date found, using folder date.")
     except Exception as e:
         print(f"❌ Date parse error: {e}")
 
@@ -93,7 +91,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
         for page in pdf_obj.pages:
             text = page.extract_text() or ""
             lines = text.split("\n")
-            skip_next = False  # For fallback merge
+            skip_next = False
 
             for idx, line in enumerate(lines):
                 if skip_next:
@@ -107,45 +105,58 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 if len(parts) < 2:
                     continue
 
-                station = None
-                nums = []
-                # ✅ Try 2-3 word station names first
+                station, nums = None, []
+
+                # ✅ Try 2-3 word names first
                 for try_idx in range(2, 4):
                     name_try = " ".join(parts[:try_idx])
-                    station_try = match_station(name_try)
-                    if station_try:
-                        station = station_try
+                    if match_station(name_try):
+                        station = match_station(name_try)
                         nums = parts[try_idx:]
                         break
 
-                # Fallback: single word
+                # Fallback single word
                 if not station:
-                    station_try = match_station(parts[0])
-                    if station_try:
-                        station = station_try
+                    if match_station(parts[0]):
+                        station = match_station(parts[0])
                         nums = parts[1:]
+
+                # Final fallback: merge next line for station
+                if not station and idx + 1 < len(lines):
+                    next_line = lines[idx + 1].strip()
+                    combined = line.strip() + " " + next_line
+                    parts = combined.split()
+                    for try_idx in range(2, 4):
+                        name_try = " ".join(parts[:try_idx])
+                        if match_station(name_try):
+                            station = match_station(name_try)
+                            nums = parts[try_idx:]
+                            skip_next = True
+                            print(f"🔄 Merged for station: {combined}")
+                            break
 
                 if not station:
                     unmatched_log.write(f"{date_folder} | NO MATCH: {line}\n")
                     print(f"❌ NO MATCH: {line}")
                     continue
 
-                # Extract numbers
-                found_nums = re.findall(r"\d+\.?\d*|\.\d+", " ".join(nums))
-                print(f"⚡ {station}: initial numbers {found_nums}")
+                # ✅ Split stuck numbers like '30.530.8'
+                raw_nums = " ".join(nums)
+                split_nums = re.findall(r"\d+\.\d+|\d+", raw_nums)
+                print(f"⚡ {station}: raw nums {split_nums}")
 
-                # ✅ Fallback: merge next line if not enough numbers
-                if len(found_nums) < 3 and idx + 1 < len(lines):
+                # Fallback: merge next line if not enough numbers
+                if len(split_nums) < 3 and idx + 1 < len(lines):
                     next_line = lines[idx + 1]
-                    more_nums = re.findall(r"\d+\.?\d*|\.\d+", next_line)
+                    more_nums = re.findall(r"\d+\.\d+|\d+", next_line)
                     if more_nums:
-                        found_nums += more_nums
+                        split_nums += more_nums
                         skip_next = True
-                        print(f"🔄 Merged next line: {next_line}")
+                        print(f"🔄 Merged next line for nums: {next_line}")
 
-                max_val = safe_number(found_nums[0]) if len(found_nums) >= 1 else ""
-                min_val = safe_number(found_nums[1]) if len(found_nums) >= 2 else ""
-                rain_val = safe_number(found_nums[2], is_rainfall=True) if len(found_nums) >= 3 else ""
+                max_val = safe_number(split_nums[0]) if len(split_nums) >= 1 else ""
+                min_val = safe_number(split_nums[1]) if len(split_nums) >= 2 else ""
+                rain_val = safe_number(split_nums[2], is_rainfall=True) if len(split_nums) >= 3 else ""
 
                 if max_val:
                     valid_max[station] = max_val
@@ -169,7 +180,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
     new_rows.extend([row_max, row_min, row_rain])
 
-# === FINAL SAVE ===
+# === SAVE FINAL ===
 if new_rows:
     df = pd.DataFrame(new_rows)
     df = df.reindex(columns=["Date", "Type"] + known_stations)
@@ -183,7 +194,7 @@ if new_rows:
                 pass
         if nums:
             return pd.Series({
-                "Average": round(sum(nums)/len(nums), 1),
+                "Average": round(sum(nums) / len(nums), 1),
                 "Max": round(max(nums), 1),
                 "Min": round(min(nums), 1)
             })
