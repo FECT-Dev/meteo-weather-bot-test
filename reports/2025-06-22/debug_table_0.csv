@@ -1,54 +1,54 @@
-Station,Max,Min,Rainfall
+0,1,2,3,4
 "ld,.=K jd¾;dj வானிழை அறிக்ழக Weather Report
  osk Wfoa 0830 g wjika jQ meh 24 i|yd 
 2025.06.21
-          for the 24 hour period ending at 0830SLTS on this date",,,
-wkqrdOmqrhஅநுராதபுரம்Anuradhapura,32.8,25.1,0.0
-"nÿ,a, பதுளைBadulla",30.0,19.1,0.0
-"nKavdrfj, பண்டாரவளைBandarawela",28.1,18.9,0.0
-"uvl,mqj மட்டக்கைப்புBatticaloa",33.8,26.4,0.0
-fld<U ககாழும்புColombo,30.6,27.0,2.1
-".d,a, காலிGalle",29.6,26.8,2.3
-yïnkaf;dg ம்பாந்ததாட்ளடHambanthota,30.5,26.5,0.0
-hdmkh  யாழ்ப்பாணம்Jaffna,33.8,27.9,0.0
-"fudKrd., கமானறாகளல Monaragala",34.3,22.1,0.0
-lgq.iaf;dg  கட்டுகஸ்ததாட்ளட Katugasthota,28.2,23.2,6.3
-lgqkdhl  கட்டுநாயக்காKatunayake,31.3,27.6,0.5
-"l=reKE., குருணாகல் Kurunagala",30.8,25.4,8.9
-"uy b¨mam,a,u மஹாஇலுப்பல்லம Maha Illuppallama",32.3,25.5,0.0
-ukakdru மன்னார்Mannar,31.8,28.2,0.0
-fmdf<dkakrej  கபாலன்நறுவ polonnaruwa,35.5,27.0,0.0
-kqjrt<sh  நுவகரலியாNuwara Eliya,20.0,15.2,13.0
-"fmd;=ú,a கபாத்துவில்Pothuvil",36.8,26.1,0.0
+          for the 24 hour period ending at 0830SLTS on this date",,,,
+wkqrdOmqrhஅநுராதபுரம்Anuradhapura,32.8,25.1,0.0,
+"nÿ,a, பதுளைBadulla",30.0,19.1,0.0,
+"nKavdrfj, பண்டாரவளைBandarawela",28.1,18.9,0.0,
+"uvl,mqj மட்டக்கைப்புBatticaloa",33.8,26.4,0.0,
+fld<U ககாழும்புColombo,30.6,27.0,2.1,
+".d,a, காலிGalle",29.6,26.8,2.3,
+yïnkaf;dg ம்பாந்ததாட்ளடHambanthota,30.5,26.5,0.0,
+hdmkh  யாழ்ப்பாணம்Jaffna,33.8,27.9,0.0,
+"fudKrd., கமானறாகளல Monaragala",34.3,22.1,0.0,
+lgq.iaf;dg  கட்டுகஸ்ததாட்ளட Katugasthota,28.2,23.2,6.3,
+lgqkdhl  கட்டுநாயக்காKatunayake,31.3,27.6,0.5,
+"l=reKE., குருணாகல் Kurunagala",30.8,25.4,8.9,
+"uy b¨mam,a,u மஹாஇலுப்பல்லம Maha Illuppallama",32.3,25.5,0.0,
+ukakdru மன்னார்Mannar,31.8,28.2,0.0,
+fmdf<dkakrej  கபாலன்நறுவ polonnaruwa,35.5,27.0,0.0,
+kqjrt<sh  நுவகரலியாNuwara Eliya,20.0,15.2,13.0,
+"fmd;=ú,a கபாத்துவில்Pothuvil",36.8,26.1,0.0,
 "m
-;a;,u புத்தைம்Puttalam",31.7,27.8,0.0
-"r;au,dk இரத்மலாளனRathmalana",32.6,27.6,1.3
-r;akmqrh இரத்தினபுரிRathnapura,32.9,23.9,13.9
-";%sl=Kdu,h திருதகாணமளலTrincomalee",35.7,26.7,0.0
-jõkshdj வவுனியாVavuniya,35.0,26.0,0.0
-"u;a;, மத்தைMattla",34.5,25.8,0.0
-මුලතිව් முல்ளலத்தீவு Mullaitivu,36.8,27.1,0.0
+;a;,u புத்தைம்Puttalam",31.7,27.8,0.0,
+"r;au,dk இரத்மலாளனRathmalana",32.6,27.6,1.3,
+r;akmqrh இரத்தினபுரிRathnapura,32.9,23.9,13.9,
+";%sl=Kdu,h திருதகாணமளலTrincomalee",35.7,26.7,0.0,
+jõkshdj வவுனியாVavuniya,35.0,26.0,0.0,
+"u;a;, மத்தைMattla",34.5,25.8,0.0,
+මුලතිව් முல்ளலத்தீவு Mullaitivu,36.8,27.1,0.0,
 "úÿ,s n,d.dr wdY%
-; c,dY  நீர்மின் நீரேந்துப் பேப்பு Hydro Catchment Areas",,,
-කාසල්රීகாசல்றீச்Castlereigh,14.0,රන්නදණිගල இ ந்மதனிகேRandenigala,
-න ෝටන්ந ாட்டன்Norton,34.9,රන්ටැනේ இ ந்தம்நபRantambe,
-මාඕස්සාකැනල්රம ௌசக்கநே Maussakele,8.0,නබෝවෙැන්  நபாவத்தன்னBowatenna,
-කැනියන්கன்யன்Canyon,20.0,උකුනවලஉக்குவேUkuwela,
-ලක්ෂපා ேக்சபானLakshapana,24.9,සම ළවැවச னேமவவSamanala Wawa,
-ඉහල නකාත්මනල්රந ல்மகாத் லேUpper Kotmale,11.2,කුකුනල්ර ගංඟ குக்குநேகங்கKukuleganaga,
-නකාත්මනල්ර மகாத் லேKotmale,12.5,මස්නකළිය ஸ்நகலியMaskeliya,
-වික්නටෝරියාவிக்ந ாறியா Victoriya,0.0,ෑබඩ ாமபாலடNeboda,
-කුඩාව குடாவ Kudawa (AWS),50.0,විො කන්ද වතුයාය விதானகந்த நதாட்டம் Vithanakanda Estate (AWS),
-ලක්සකන්ද ேக்சகந்த Laksakanda (AWS),46.0,නදහිඕවිට மதஹிநயாவிட்ட Dehiowita (AWS),
-ගුරුළුවා  குறுழுவான Guruluwana,44.3,ග්නලන්ිල්ර් කර්. கிேன்டில்ட் நத. மதா. Glentilt Factory (AWS),
-ලක්ෂපා  නත්.කර්. ேக்ஷபான நத. மதா. Laxapana TF,42.5,නෙේප ාව மதப்பனாவ Theppanawa (AWS),
-උඩරදැල්රල உடறதல்ே Udaradella,40.0,ලබුගම ேபுக  Labugama,
-දික්ඔය டிக்நகாயா Dikoya  (AWS),38.0,හල්රනගාල්රල නත්.කර්. ஹல்மகால்ே நத. மதா. Halgolla TF (AWS),
-දූලි ඇල්රල නත්.කර්. துலி எல்ே நத. மதா. Duli Ella TF (AWS),33.0,ය්ටපාෙ யட்டபத்த Yattapatha (AWS),
-කුරුවිට குருவிட்ட Kuruvita (AWS),32.5,ෙල්රදූව වතුයාය தல்துவ நதாட்டம் Thalduwa Estate (AWS),
-කෑරගල கா கே Karagala,32.4,උඩුගම உடுக  Udugama (AWS),
-මාදම්නේ  ாதம்நப Madampe (AWS),31.5,නපන්රිත් වතුයාය மபன்ரித் நதாட்டம் Penrith Estate (AWS),
+; c,dY  நீர்மின் நீரேந்துப் பேப்பு Hydro Catchment Areas",,,,
+කාසල්රීகாசல்றீச்Castlereigh,14.0,රන්නදණිගල இ ந்மதனிகேRandenigala,,0.0
+න ෝටන්ந ாட்டன்Norton,34.9,රන්ටැනේ இ ந்தம்நபRantambe,,0.0
+මාඕස්සාකැනල්රம ௌசக்கநே Maussakele,8.0,නබෝවෙැන්  நபாவத்தன்னBowatenna,,0.0
+කැනියන්கன்யன்Canyon,20.0,උකුනවලஉக்குவேUkuwela,,7.3
+ලක්ෂපා ேக்சபானLakshapana,24.9,සම ළවැවச னேமவவSamanala Wawa,,0.0
+ඉහල නකාත්මනල්රந ல்மகாத் லேUpper Kotmale,11.2,කුකුනල්ර ගංඟ குக்குநேகங்கKukuleganaga,,8.0
+නකාත්මනල්ර மகாத் லேKotmale,12.5,මස්නකළිය ஸ்நகலியMaskeliya,,NA
+වික්නටෝරියාவிக்ந ாறியா Victoriya,0.0,ෑබඩ ாமபாலடNeboda,,NA
+කුඩාව குடாவ Kudawa (AWS),50.0,විො කන්ද වතුයාය விதானகந்த நதாட்டம் Vithanakanda Estate (AWS),,29.5
+ලක්සකන්ද ேக்சகந்த Laksakanda (AWS),46.0,නදහිඕවිට மதஹிநயாவிட்ட Dehiowita (AWS),,28.0
+ගුරුළුවා  குறுழுவான Guruluwana,44.3,ග්නලන්ිල්ර් කර්. கிேன்டில்ட் நத. மதா. Glentilt Factory (AWS),,27.0
+ලක්ෂපා  නත්.කර්. ேக்ஷபான நத. மதா. Laxapana TF,42.5,නෙේප ාව மதப்பனாவ Theppanawa (AWS),,26.0
+උඩරදැල්රල உடறதல்ே Udaradella,40.0,ලබුගම ேபுக  Labugama,,21.5
+දික්ඔය டிக்நகாயா Dikoya  (AWS),38.0,හල්රනගාල්රල නත්.කර්. ஹல்மகால்ே நத. மதா. Halgolla TF (AWS),,21.5
+දූලි ඇල්රල නත්.කර්. துலி எல்ே நத. மதா. Duli Ella TF (AWS),33.0,ය්ටපාෙ யட்டபத்த Yattapatha (AWS),,21.0
+කුරුවිට குருவிட்ட Kuruvita (AWS),32.5,ෙල්රදූව වතුයාය தல்துவ நதாட்டம் Thalduwa Estate (AWS),,20.0
+කෑරගල கா கே Karagala,32.4,උඩුගම உடுக  Udugama (AWS),,19.5
+මාදම්නේ  ாதம்நப Madampe (AWS),31.5,නපන්රිත් වතුයාය மபன்ரித் நதாட்டம் Penrith Estate (AWS),,19.0
 Wmßu j¾Idm;kh  / அதிகூடிய மழைவீழ்ச்சி/ Highest Rainfall :,,"කුඩාව குடாவ Kudawa (AWS)
 50.0
 mm
-(Rathnapura)",
+(Rathnapura)",,
