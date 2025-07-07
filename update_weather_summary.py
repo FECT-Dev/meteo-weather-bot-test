@@ -18,7 +18,7 @@ known_stations = [
 ]
 
 def safe_number(v, is_rainfall=False):
-    v = str(v).upper().replace("O", "0").replace("|", "1").replace("I", "1").replace("l", "1")
+    v = str(v).upper().replace("O", "0").replace("|", "1").replace("I", "1").strip()
     v = re.sub(r"[^\d.]", "", v)
     if not v:
         return ""
@@ -30,9 +30,8 @@ def safe_number(v, is_rainfall=False):
     except:
         return ""
 
-def fuzzy_station(name):
-    name = name.lower().strip()
-    best = get_close_matches(name, [s.lower() for s in known_stations], n=1, cutoff=0.5)
+def match_station(name):
+    best = get_close_matches(name.lower(), [s.lower() for s in known_stations], n=1, cutoff=0.5)
     if best:
         for s in known_stations:
             if s.lower() == best[0]:
@@ -48,63 +47,60 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
     pdf_path = os.path.join(folder_path, f"weather-{date_folder}.pdf")
     if not os.path.exists(pdf_path):
-        print(f"⚠️ Skipping {date_folder}: PDF not found.")
         continue
 
-    print(f"\n📂 Processing {pdf_path}")
+    print(f"📂 Processing {pdf_path}")
 
-    # Extract date
     with open(pdf_path, "rb") as f:
         reader = PyPDF2.PdfReader(f)
         page_text = reader.pages[0].extract_text()
         date_match = re.search(r"\d{4}\.\d{2}\.\d{2}", page_text)
         actual_date = date_match.group(0).replace(".", "-") if date_match else date_folder
-    print(f"📅 Using date: {actual_date}")
 
     valid_max, valid_min, valid_rain = {}, {}, {}
 
     try:
-        # Try lattice first
         tables = camelot.read_pdf(pdf_path, pages="1", flavor="lattice")
         if len(tables) == 0:
-            print("⚠️ No lattice tables, trying stream...")
             tables = camelot.read_pdf(pdf_path, pages="1", flavor="stream")
-
-        if len(tables) == 0:
-            print("❌ No tables found, skipping PDF.")
-            continue
+        print(f"🔍 Tables found: {len(tables)}")
 
         for idx, table in enumerate(tables):
             df = table.df
-            debug_file = os.path.join(folder_path, f"debug_table_{idx}.csv")
-            df.to_csv(debug_file, index=False)
-            print(f"📄 Saved debug: {debug_file}")
+            df.to_csv(os.path.join(folder_path, f"debug_table_{idx}.csv"), index=False)
+
+            # Drop possible multi-header rows
+            df = df[~df.iloc[:, 0].str.contains("Station|Meteorological", case=False, na=False)]
 
             if df.shape[1] >= 3:
-                df.columns = ["Station", "Max", "Min", "Rainfall"]
+                df.columns = ["Station", "Max", "Min", "Rainfall"][:df.shape[1]]
             elif df.shape[1] == 2:
                 df.columns = ["Station", "Rainfall"]
             else:
                 continue
 
-            if "Station" in df.iloc[0].to_string():
-                df = df.iloc[1:]
-
             for _, row in df.iterrows():
-                raw = str(row["Station"]).strip()
-                matches = re.findall(r"[A-Za-z][A-Za-z ]+", raw)
-                possible = matches[-1].strip() if matches else ""
-                station = fuzzy_station(possible)
-                if not station:
+                station_raw = str(row["Station"]).strip()
+                matches = re.findall(r"[A-Za-z][A-Za-z ]+", station_raw)
+                station_name = matches[-1].strip().title() if matches else ""
+                station_name = match_station(station_name)
+
+                if not station_name:
+                    print(f"❌ NO MATCH: {station_raw}")
                     continue
 
-                max_val = safe_number(row.get("Max", ""))
-                min_val = safe_number(row.get("Min", ""))
-                rain_val = safe_number(row.get("Rainfall", ""), is_rainfall=True)
-
-                if max_val: valid_max[station] = max_val
-                if min_val: valid_min[station] = min_val
-                if rain_val: valid_rain[station] = rain_val
+                if "Max" in row:
+                    max_val = safe_number(row["Max"])
+                    if max_val:
+                        valid_max[station_name] = max_val
+                if "Min" in row:
+                    min_val = safe_number(row["Min"])
+                    if min_val:
+                        valid_min[station_name] = min_val
+                if "Rainfall" in row:
+                    rain_val = safe_number(row["Rainfall"], is_rainfall=True)
+                    if rain_val:
+                        valid_rain[station_name] = rain_val
 
         row_max = {"Date": actual_date, "Type": "Max"}
         row_min = {"Date": actual_date, "Type": "Min"}
@@ -116,17 +112,15 @@ for date_folder in sorted(os.listdir(reports_folder)):
             row_rain[s] = valid_rain.get(s, "")
 
         new_rows.extend([row_max, row_min, row_rain])
-        print(f"✅ Added rows for {actual_date}")
 
     except Exception as e:
-        print(f"❌ Error processing {pdf_path}: {e}")
+        print(f"❌ Error: {e}")
 
-# === SAVE CSV ===
+# === FINAL SAVE ===
 if new_rows:
-    final_df = pd.DataFrame(new_rows)
-    final_df = final_df.reindex(columns=["Date", "Type"] + known_stations)
-    final_df.drop_duplicates(subset=["Date", "Type"], keep="last", inplace=True)
-    final_df.to_csv(summary_file, index=False)
-    print(f"✅ Saved summary: {summary_file} — {len(final_df)} rows")
+    df = pd.DataFrame(new_rows)
+    df = df.reindex(columns=["Date", "Type"] + known_stations)
+    df.to_csv(summary_file, index=False)
+    print(f"✅ Saved: {summary_file} — {len(df)} rows")
 else:
-    print("⚠️ No data added.")
+    print("⚠️ No new rows found.")
