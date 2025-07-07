@@ -52,21 +52,24 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
     print(f"\n📂 Processing: {pdf}")
 
-    # === Extract date from PDF and shift it back 1 day ===
+    # === Extract and shift PDF date ===
+    actual_date = date_folder  # fallback
     with open(pdf, "rb") as f:
         reader = PyPDF2.PdfReader(f)
-        txt = reader.pages[0].extract_text()
-        date_match = re.search(r"\d{4}\.\d{2}\.\d{2}", txt)
+        text = reader.pages[0].extract_text()
+        date_match = re.search(r"\d{4}\.\d{2}\.\d{2}", text)
 
         if date_match:
             header_date = date_match.group(0).replace(".", "-")
-            published = datetime.strptime(header_date, "%Y-%m-%d")
-            shifted = published - timedelta(days=1)
-            actual_date = shifted.strftime("%Y-%m-%d")
-            print(f"📅 PDF shows: {header_date} ➜ Shifted to: {actual_date}")
+            try:
+                published = datetime.strptime(header_date, "%Y-%m-%d")
+                shifted = published - timedelta(days=1)
+                actual_date = shifted.strftime("%Y-%m-%d")
+                print(f"📅 PDF date: {header_date} → Shifted to: {actual_date}")
+            except Exception as e:
+                print(f"❌ Date parse error: {e}")
         else:
-            actual_date = date_folder
-            print(f"⚠️ No header date found, using folder: {actual_date}")
+            print(f"⚠️ No header date found, using folder name: {actual_date}")
 
     valid_max, valid_min, valid_rain = {}, {}, {}
 
@@ -115,6 +118,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 val = safe_number(row["Rainfall"], is_rainfall=True)
                 if val: valid_rain[s] = val
 
+    # ✅ Always use shifted date!
     row_max = {"Date": actual_date, "Type": "Max"}
     row_min = {"Date": actual_date, "Type": "Min"}
     row_rain = {"Date": actual_date, "Type": "Rainfall"}
