@@ -18,7 +18,7 @@ known_stations = [
     "Mullaitivu"
 ]
 
-# Optional: fix common OCR errors
+# ✅ Optional: fix common OCR errors
 station_aliases = {
     "Maha llluppallama": "Maha Illuppallama",
     "Ratmalana": "Rathmalana",
@@ -94,7 +94,6 @@ for date_folder in sorted(os.listdir(reports_folder)):
             text = page.extract_text() or ""
             lines = text.split("\n")
             for line in lines:
-                # Skip lines that have no digits
                 if not re.search(r"\d", line):
                     continue
 
@@ -102,15 +101,31 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 if len(parts) < 2:
                     continue
 
-                # Try to match the station
-                station = match_station(parts[0])
+                station = None
+                nums = []
+                # ✅ Try to match 2 or 3-word station names
+                for try_idx in range(2, 4):
+                    name_try = " ".join(parts[:try_idx])
+                    station_try = match_station(name_try)
+                    if station_try:
+                        station = station_try
+                        nums = parts[try_idx:]
+                        break
+
+                # If not matched, try 1 word fallback
+                if not station:
+                    station_try = match_station(parts[0])
+                    if station_try:
+                        station = station_try
+                        nums = parts[1:]
+
                 if not station:
                     unmatched_log.write(f"{date_folder} | NO MATCH: {line}\n")
                     print(f"❌ NO MATCH: {line}")
                     continue
 
-                # Extract numeric values
-                nums = re.findall(r"\d+\.?\d*", " ".join(parts[1:]))
+                # ✅ Extract numbers robustly
+                nums = re.findall(r"\d+\.?\d*|\.\d+", " ".join(nums))
                 print(f"⚡ {station}: found numbers {nums}")
 
                 max_val = safe_number(nums[0]) if len(nums) >= 1 else ""
