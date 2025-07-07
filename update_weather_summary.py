@@ -4,7 +4,7 @@ import pandas as pd
 import camelot
 import PyPDF2
 from difflib import get_close_matches
-from datetime import datetime, timedelta  # ✅ Needed for date shift
+from datetime import datetime, timedelta  # ✅ Date shift
 
 # === CONFIG ===
 reports_folder = "reports"
@@ -58,7 +58,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
         date_match = re.search(r"\d{4}\.\d{2}\.\d{2}", txt)
         actual_date = date_match.group(0).replace(".", "-") if date_match else date_folder
 
-        # ✅ Shift the date back by 1 day
+        # ✅ Shift the PDF published date back by 1 day
         if date_match:
             published = datetime.strptime(actual_date, "%Y-%m-%d")
             shifted = published - timedelta(days=1)
@@ -66,7 +66,6 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
     valid_max, valid_min, valid_rain = {}, {}, {}
 
-    # === Try lattice first, fallback to stream ===
     tables = camelot.read_pdf(pdf, pages="1", flavor="lattice")
     if len(tables) == 0:
         tables = camelot.read_pdf(pdf, pages="1", flavor="stream")
@@ -75,11 +74,9 @@ for date_folder in sorted(os.listdir(reports_folder)):
     for idx, table in enumerate(tables):
         df = table.df
 
-        # === Drop empty rows and extra header rows ===
         df = df[df.iloc[:, 0].str.strip() != ""]
         df = df[~df.iloc[:, 0].str.contains("Station|Meteorological", case=False, na=False)]
 
-        # === Drop trailing empty columns ===
         df = df.dropna(axis=1, how="all")
         df = df.loc[:, ~(df == "").all()]
         print(f"✅ Table shape after cleanup: {df.shape}")
@@ -95,7 +92,6 @@ for date_folder in sorted(os.listdir(reports_folder)):
             print(f"⚠️ Skipping table {idx}: Unexpected columns ({df.shape[1]})")
             continue
 
-        # === Debug output ===
         debug_file = os.path.join(folder, f"debug_table_{idx}.csv")
         df.to_csv(debug_file, index=False)
         print(f"📄 Saved: {debug_file}")
@@ -117,7 +113,6 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 val = safe_number(row["Rainfall"], is_rainfall=True)
                 if val: valid_rain[s] = val
 
-    # === Always write 3 rows per date ===
     row_max = {"Date": actual_date, "Type": "Max"}
     row_min = {"Date": actual_date, "Type": "Min"}
     row_rain = {"Date": actual_date, "Type": "Rainfall"}
@@ -131,6 +126,27 @@ for date_folder in sorted(os.listdir(reports_folder)):
 if new_rows:
     df = pd.DataFrame(new_rows)
     df = df.reindex(columns=["Date", "Type"] + known_stations)
+
+    # ✅ Add Average, Max, Min per row
+    def compute_stats(row):
+        nums = []
+        for s in known_stations:
+            try:
+                nums.append(float(row[s]))
+            except:
+                pass
+        if nums:
+            return pd.Series({
+                "Average": round(sum(nums)/len(nums), 1),
+                "Max": round(max(nums), 1),
+                "Min": round(min(nums), 1)
+            })
+        else:
+            return pd.Series({"Average": "", "Max": "", "Min": ""})
+
+    stats = df.apply(compute_stats, axis=1)
+    df = pd.concat([df, stats], axis=1)
+
     df.to_csv(summary_file, index=False)
     print(f"✅ Updated: {summary_file} — {len(df)} rows")
 else:
