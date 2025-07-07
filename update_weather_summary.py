@@ -1,7 +1,7 @@
 import os
 import re
+import pdfplumber
 import pandas as pd
-import camelot
 import PyPDF2
 from difflib import get_close_matches
 from datetime import datetime, timedelta
@@ -44,6 +44,7 @@ def safe_number(v, is_rainfall=False):
         return ""
 
 def match_station(name):
+    name = name.strip().title()
     if name in station_aliases:
         return station_aliases[name]
     best = get_close_matches(name.lower(), [s.lower() for s in known_stations], n=1, cutoff=0.3)
@@ -86,57 +87,44 @@ for date_folder in sorted(os.listdir(reports_folder)):
         print(f"❌ Date parse error: {e}")
 
     valid_max, valid_min, valid_rain = {}, {}, {}
-
-    # Force stream mode with better edge tolerance
-    tables = camelot.read_pdf(
-        pdf,
-        pages="1",
-        flavor="stream",
-        edge_tol=500,
-        strip_text="\n"
-    )
-
-    print(f"✅ Tables found: {len(tables)}")
-
     unmatched_log = open(os.path.join(folder, "unmatched_stations.log"), "a")
 
-    for idx, table in enumerate(tables):
-        df = table.df
-        df = df[df.iloc[:, 0].str.strip() != ""]
-        df = df[~df.iloc[:, 0].str.contains("Station|Meteorological", case=False, na=False)]
+    with pdfplumber.open(pdf) as pdf_obj:
+        for page in pdf_obj.pages:
+            text = page.extract_text() or ""
+            lines = text.split("\n")
+            for line in lines:
+                # Skip lines that have no digits
+                if not re.search(r"\d", line):
+                    continue
 
-        debug_file = os.path.join(folder, f"debug_table_{idx}.csv")
-        df.to_csv(debug_file, index=False)
+                parts = line.strip().split()
+                if len(parts) < 2:
+                    continue
 
-        for _, row in df.iterrows():
-            station_raw = str(row["Station"]) if "Station" in row else " ".join(str(c) for c in row)
-            name_match = re.findall(r"[A-Za-z][A-Za-z ]+", station_raw)
-            station = match_station(name_match[-1].strip().title()) if name_match else ""
-            if not station:
-                unmatched_log.write(f"{date_folder} | NO MATCH: {station_raw}\n")
-                print(f"❌ NO MATCH: {station_raw}")
-                continue
+                # Try to match the station
+                station = match_station(parts[0])
+                if not station:
+                    unmatched_log.write(f"{date_folder} | NO MATCH: {line}\n")
+                    print(f"❌ NO MATCH: {line}")
+                    continue
 
-            max_val = safe_number(row["Max"]) if "Max" in row else ""
-            min_val = safe_number(row["Min"]) if "Min" in row else ""
-            rain_val = safe_number(row["Rainfall"], is_rainfall=True) if "Rainfall" in row else ""
+                # Extract numeric values
+                nums = re.findall(r"\d+\.?\d*", " ".join(parts[1:]))
+                print(f"⚡ {station}: found numbers {nums}")
 
-            if not max_val or not min_val or not rain_val:
-                text_row = " ".join(str(c) for c in row)
-                nums = re.findall(r"\d+\.?\d*|\.\d+", text_row)
-                print(f"⚡ Fallback nums for {station}: {nums}")
-                if len(nums) >= 1 and not max_val:
-                    max_val = safe_number(nums[0])
-                if len(nums) >= 2 and not min_val:
-                    min_val = safe_number(nums[1])
-                if len(nums) >= 3 and not rain_val:
-                    rain_val = safe_number(nums[2], is_rainfall=True)
+                max_val = safe_number(nums[0]) if len(nums) >= 1 else ""
+                min_val = safe_number(nums[1]) if len(nums) >= 2 else ""
+                rain_val = safe_number(nums[2], is_rainfall=True) if len(nums) >= 3 else ""
 
-            if max_val: valid_max[station] = max_val
-            if min_val: valid_min[station] = min_val
-            if rain_val: valid_rain[station] = rain_val
+                if max_val:
+                    valid_max[station] = max_val
+                if min_val:
+                    valid_min[station] = min_val
+                if rain_val:
+                    valid_rain[station] = rain_val
 
-            print(f"✅ {station} ➜ Max:{max_val} Min:{min_val} Rain:{rain_val}")
+                print(f"✅ {station} ➜ Max:{max_val} Min:{min_val} Rain:{rain_val}")
 
     unmatched_log.close()
 
