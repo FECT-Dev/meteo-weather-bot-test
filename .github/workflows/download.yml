@@ -34,7 +34,7 @@ jobs:
       - name: 📦 Install Python dependencies
         run: |
           pip install --upgrade pip
-          # ✅ Install pdfplumber and any other required packages
+          # ✅ Install pdfplumber + all required libraries
           pip install pdfplumber camelot-py[cv] pdf2image pytesseract PyPDF2 selenium chromedriver-autoinstaller pillow
 
       - name: 🗂️ Check installed Chrome version
@@ -87,3 +87,4 @@ jobs:
           else
             git commit -m "Add weather report and update summary for $(date +%Y-%m-%d)"
             git push origin main
+          fi  # ✅ Properly closes the 'if' block
