@@ -130,6 +130,7 @@ if new_rows:
     df = pd.DataFrame(new_rows)
     df = df.reindex(columns=["Date", "Type"] + known_stations)
 
+    # ✅ Add Average, Max, Min per row
     def compute_stats(row):
         nums = []
         for s in known_stations:
@@ -148,6 +149,12 @@ if new_rows:
 
     stats = df.apply(compute_stats, axis=1)
     df = pd.concat([df, stats], axis=1)
+
+    # ✅ Drop duplicate rows for Date+Type
+    if os.path.exists(summary_file):
+        old_df = pd.read_csv(summary_file)
+        df = pd.concat([old_df, df], ignore_index=True)
+        df.drop_duplicates(subset=["Date", "Type"], keep="last", inplace=True)
 
     df.to_csv(summary_file, index=False)
     print(f"✅ Saved: {summary_file} — {len(df)} rows")
