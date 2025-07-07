@@ -93,7 +93,13 @@ for date_folder in sorted(os.listdir(reports_folder)):
         for page in pdf_obj.pages:
             text = page.extract_text() or ""
             lines = text.split("\n")
-            for line in lines:
+            skip_next = False  # For fallback merge
+
+            for idx, line in enumerate(lines):
+                if skip_next:
+                    skip_next = False
+                    continue
+
                 if not re.search(r"\d", line):
                     continue
 
@@ -103,7 +109,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
                 station = None
                 nums = []
-                # ✅ Try to match 2 or 3-word station names
+                # ✅ Try 2-3 word station names first
                 for try_idx in range(2, 4):
                     name_try = " ".join(parts[:try_idx])
                     station_try = match_station(name_try)
@@ -112,7 +118,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
                         nums = parts[try_idx:]
                         break
 
-                # If not matched, try 1 word fallback
+                # Fallback: single word
                 if not station:
                     station_try = match_station(parts[0])
                     if station_try:
@@ -124,13 +130,22 @@ for date_folder in sorted(os.listdir(reports_folder)):
                     print(f"❌ NO MATCH: {line}")
                     continue
 
-                # ✅ Extract numbers robustly
-                nums = re.findall(r"\d+\.?\d*|\.\d+", " ".join(nums))
-                print(f"⚡ {station}: found numbers {nums}")
+                # Extract numbers
+                found_nums = re.findall(r"\d+\.?\d*|\.\d+", " ".join(nums))
+                print(f"⚡ {station}: initial numbers {found_nums}")
 
-                max_val = safe_number(nums[0]) if len(nums) >= 1 else ""
-                min_val = safe_number(nums[1]) if len(nums) >= 2 else ""
-                rain_val = safe_number(nums[2], is_rainfall=True) if len(nums) >= 3 else ""
+                # ✅ Fallback: merge next line if not enough numbers
+                if len(found_nums) < 3 and idx + 1 < len(lines):
+                    next_line = lines[idx + 1]
+                    more_nums = re.findall(r"\d+\.?\d*|\.\d+", next_line)
+                    if more_nums:
+                        found_nums += more_nums
+                        skip_next = True
+                        print(f"🔄 Merged next line: {next_line}")
+
+                max_val = safe_number(found_nums[0]) if len(found_nums) >= 1 else ""
+                min_val = safe_number(found_nums[1]) if len(found_nums) >= 2 else ""
+                rain_val = safe_number(found_nums[2], is_rainfall=True) if len(found_nums) >= 3 else ""
 
                 if max_val:
                     valid_max[station] = max_val
