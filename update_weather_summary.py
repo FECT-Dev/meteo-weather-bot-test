@@ -57,8 +57,7 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
     print(f"\n📂 Processing: {pdf}")
 
-    # === Extract and shift PDF date ===
-    actual_date = date_folder  # fallback if no header
+    actual_date = date_folder  # fallback if header missing
     try:
         with open(pdf, "rb") as f:
             reader = PyPDF2.PdfReader(f)
@@ -69,14 +68,15 @@ for date_folder in sorted(os.listdir(reports_folder)):
                 published = datetime.strptime(header_date, "%Y-%m-%d")
                 shifted = published - timedelta(days=1)
                 actual_date = shifted.strftime("%Y-%m-%d")
-                print(f"📅 PDF date: {header_date} → Shifted to: {actual_date}")
+                print(f"📅 PDF date: {header_date} → Shifted: {actual_date}")
     except Exception as e:
-        print(f"❌ Date extraction failed: {e}")
+        print(f"❌ Date parse error: {e}")
 
     valid_max, valid_min, valid_rain = {}, {}, {}
 
     tables = camelot.read_pdf(pdf, pages="1", flavor="lattice")
     if len(tables) == 0:
+        print("⚠️ Lattice gave nothing — trying stream...")
         tables = camelot.read_pdf(pdf, pages="1", flavor="stream")
 
     print(f"✅ Tables found: {len(tables)}")
@@ -90,14 +90,15 @@ for date_folder in sorted(os.listdir(reports_folder)):
         df.to_csv(debug_file, index=False)
 
         for _, row in df.iterrows():
-            text_row = " ".join(row).replace("\n"," ")
+            # Combine all cells to catch split lines
+            text_row = " ".join(str(cell) for cell in row).replace("\n"," ")
             name_match = re.findall(r"[A-Za-z][A-Za-z ]+", text_row)
             station = match_station(name_match[-1].strip().title()) if name_match else ""
             if not station:
                 print(f"❌ NO MATCH: {text_row}")
                 continue
 
-            # Match both decimals and integers
+            # Catch both decimals and integers
             nums = re.findall(r"\d+\.\d+|\d+", text_row)
             max_val = safe_number(nums[0]) if len(nums) >= 1 else ""
             min_val = safe_number(nums[1]) if len(nums) >= 2 else ""
