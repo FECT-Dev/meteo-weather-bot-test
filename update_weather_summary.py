@@ -90,82 +90,31 @@ for date_folder in sorted(os.listdir(reports_folder)):
     with pdfplumber.open(pdf) as pdf_obj:
         for page in pdf_obj.pages:
             text = page.extract_text() or ""
-            lines = text.split("\n")
-            skip_next = False
 
-            for idx, line in enumerate(lines):
-                if skip_next:
-                    skip_next = False
-                    continue
+            # --- Meteorological Stations: Max & Min ---
+            for m in re.finditer(r"([A-Za-z][A-Za-z ]+?)\s+(\d+\.\d+)\s+(\d+\.\d+)", text):
+                station = match_station(m.group(1))
+                if station:
+                    max_val = safe_number(m.group(2))
+                    min_val = safe_number(m.group(3))
+                    if max_val:
+                        valid_max[station] = max_val
+                    if min_val:
+                        valid_min[station] = min_val
+                    print(f"✅ {station} ➜ Max:{max_val} Min:{min_val}")
+                else:
+                    unmatched_log.write(f"{date_folder} | NO MATCH: {m.group(1)}\n")
 
-                if not re.search(r"\d", line):
-                    continue
-
-                parts = line.strip().split()
-                if len(parts) < 2:
-                    continue
-
-                station, nums = None, []
-
-                # ✅ Try 2-3 word names first
-                for try_idx in range(2, 4):
-                    name_try = " ".join(parts[:try_idx])
-                    if match_station(name_try):
-                        station = match_station(name_try)
-                        nums = parts[try_idx:]
-                        break
-
-                # Fallback single word
-                if not station:
-                    if match_station(parts[0]):
-                        station = match_station(parts[0])
-                        nums = parts[1:]
-
-                # Final fallback: merge next line for station
-                if not station and idx + 1 < len(lines):
-                    next_line = lines[idx + 1].strip()
-                    combined = line.strip() + " " + next_line
-                    parts = combined.split()
-                    for try_idx in range(2, 4):
-                        name_try = " ".join(parts[:try_idx])
-                        if match_station(name_try):
-                            station = match_station(name_try)
-                            nums = parts[try_idx:]
-                            skip_next = True
-                            print(f"🔄 Merged for station: {combined}")
-                            break
-
-                if not station:
-                    unmatched_log.write(f"{date_folder} | NO MATCH: {line}\n")
-                    print(f"❌ NO MATCH: {line}")
-                    continue
-
-                # ✅ Split stuck numbers like '30.530.8'
-                raw_nums = " ".join(nums)
-                split_nums = re.findall(r"\d+\.\d+|\d+", raw_nums)
-                print(f"⚡ {station}: raw nums {split_nums}")
-
-                # Fallback: merge next line if not enough numbers
-                if len(split_nums) < 3 and idx + 1 < len(lines):
-                    next_line = lines[idx + 1]
-                    more_nums = re.findall(r"\d+\.\d+|\d+", next_line)
-                    if more_nums:
-                        split_nums += more_nums
-                        skip_next = True
-                        print(f"🔄 Merged next line for nums: {next_line}")
-
-                max_val = safe_number(split_nums[0]) if len(split_nums) >= 1 else ""
-                min_val = safe_number(split_nums[1]) if len(split_nums) >= 2 else ""
-                rain_val = safe_number(split_nums[2], is_rainfall=True) if len(split_nums) >= 3 else ""
-
-                if max_val:
-                    valid_max[station] = max_val
-                if min_val:
-                    valid_min[station] = min_val
-                if rain_val:
-                    valid_rain[station] = rain_val
-
-                print(f"✅ {station} ➜ Max:{max_val} Min:{min_val} Rain:{rain_val}")
+            # --- Rainfall Stations ---
+            for m in re.finditer(r"([A-Za-z][A-Za-z ]+?)\s+(\d+\.\d+|TR)", text):
+                station = match_station(m.group(1))
+                if station:
+                    rain_val = safe_number(m.group(2), is_rainfall=True)
+                    if rain_val:
+                        valid_rain[station] = rain_val
+                    print(f"🌧 {station} ➜ Rain:{rain_val}")
+                else:
+                    unmatched_log.write(f"{date_folder} | NO MATCH (rain): {m.group(1)}\n")
 
     unmatched_log.close()
 
