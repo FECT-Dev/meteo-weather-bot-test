@@ -91,30 +91,22 @@ for date_folder in sorted(os.listdir(reports_folder)):
         for page in pdf_obj.pages:
             text = page.extract_text() or ""
 
-            # --- Meteorological Stations: Max & Min ---
-            for m in re.finditer(r"([A-Za-z][A-Za-z ]+?)\s+(\d+\.\d+)\s+(\d+\.\d+)", text):
+            # ✅ Extract Max, Min, and Rainfall from single line
+            for m in re.finditer(r"([A-Za-z][A-Za-z ]+?)\s+(\d+\.\d+)\s+(\d+\.\d+)\s+(TR|\d+\.\d+)", text):
                 station = match_station(m.group(1))
                 if station:
                     max_val = safe_number(m.group(2))
                     min_val = safe_number(m.group(3))
+                    rain_val = safe_number(m.group(4), is_rainfall=True)
                     if max_val:
                         valid_max[station] = max_val
                     if min_val:
                         valid_min[station] = min_val
-                    print(f"✅ {station} ➜ Max:{max_val} Min:{min_val}")
-                else:
-                    unmatched_log.write(f"{date_folder} | NO MATCH: {m.group(1)}\n")
-
-            # --- Rainfall Stations ---
-            for m in re.finditer(r"([A-Za-z][A-Za-z ]+?)\s+(\d+\.\d+|TR)", text):
-                station = match_station(m.group(1))
-                if station:
-                    rain_val = safe_number(m.group(2), is_rainfall=True)
                     if rain_val:
                         valid_rain[station] = rain_val
-                    print(f"🌧 {station} ➜ Rain:{rain_val}")
+                    print(f"✅ {station} ➜ Max:{max_val} Min:{min_val} Rain:{rain_val}")
                 else:
-                    unmatched_log.write(f"{date_folder} | NO MATCH (rain): {m.group(1)}\n")
+                    unmatched_log.write(f"{date_folder} | NO MATCH: {m.group(1)}\n")
 
     unmatched_log.close()
 
