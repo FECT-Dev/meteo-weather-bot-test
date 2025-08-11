@@ -18,30 +18,32 @@ known_stations = [
     "Mullaitivu"
 ]
 
-# Fix common OCR spelling issues
+# Common aliases seen in PDFs
 station_aliases = {
     "Maha llluppallama": "Maha Illuppallama",
     "Ratmalana": "Rathmalana",
     "Ratnapura": "Rathnapura",
+    "Kurunagala": "Kurunegala",
 }
 
 def safe_number(v, is_rainfall=False):
-    # Preserve NA and map TR -> 0.01
     raw = str(v).strip()
     up = raw.upper()
+    # keep NA as-is
     if "NA" in up:
         return "NA"
+    # map TR/TRACE to 0.01
     if "TR" in up or "TRACE" in up:
         return "0.01"
-
+    # map dashes to 0.0 (how dept prints “no rain” sometimes)
     if up in ["-", "--"]:
         return "0.0"
 
-    # Clean typical OCR artifacts
+    # fix common OCR confusions
     cleaned = raw.replace("O", "0").replace("|", "1").replace("I", "1").replace("l", "1")
     cleaned = re.sub(r"[^\d.]", "", cleaned)
 
-    if not cleaned or cleaned == ".":
+    if cleaned in ("", "."):
         return ""
 
     try:
@@ -76,20 +78,18 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
     print(f"\n📂 Processing: {pdf}")
 
-    # Derive actual date (publish date minus 1)
+    # --- detect actual date from header (then minus one day) ---
     actual_date = date_folder
     try:
         with open(pdf, "rb") as f:
             reader = PyPDF2.PdfReader(f)
-            text_all = "".join(page.extract_text() or "" for page in reader.pages)
-            date_match = re.search(r"(\d{4}[./-]\d{2}[./-]\d{2})", text_all)
+            all_text = "".join(page.extract_text() or "" for page in reader.pages)
+            date_match = re.search(r"(\d{4}[./-]\d{2}[./-]\d{2})", all_text)
             if date_match:
                 header_date = date_match.group(0).replace("/", "-").replace(".", "-")
                 published = datetime.strptime(header_date, "%Y-%m-%d")
                 actual_date = (published - timedelta(days=1)).strftime("%Y-%m-%d")
-                print(f"📅 PDF date: {header_date} → Shifted to: {actual_date}")
-            else:
-                print("⚠️ No date found, using folder date.")
+                print(f"📅 PDF date: {header_date} → {actual_date}")
     except Exception as e:
         print(f"❌ Date parse error: {e}")
 
@@ -100,38 +100,69 @@ for date_folder in sorted(os.listdir(reports_folder)):
         for page in pdf_obj.pages:
             text = page.extract_text() or ""
 
-            # Capture: Station  Max  Min  Rainfall
-            # Allow NA in any numeric slot; rainfall also allows TR.
-            pattern = r"([A-Za-z][A-Za-z ]+?)\s+(NA|\d+\.\d+)\s+(NA|\d+\.\d+)\s+(NA|TR|\d+\.\d+)"
+            # ---- PASS 1: wide regex across the page ----
+            # Allow integers or decimals, plus NA/TR in any slot.
+            num = r"(?:NA|TR|\d+(?:\.\d+)?)"
+            pattern = rf"([A-Za-z][A-Za-z ]+?)\s+{num}\s+{num}\s+{num}"
             for m in re.finditer(pattern, text):
-                station = match_station(m.group(1))
+                st_raw = m.group(1)
+                vals = re.findall(num, m.group(0))
+                if len(vals) < 3:
+                    continue
+                max_raw, min_raw, rain_raw = vals[:3]
+
+                station = match_station(st_raw)
+                if not station:
+                    # try to trim trailing spaces and re-match
+                    station = match_station(st_raw.split()[-1])
+
                 if station:
-                    max_val = safe_number(m.group(2))
-                    min_val = safe_number(m.group(3))
-                    rain_val = safe_number(m.group(4), is_rainfall=True)
+                    max_val  = safe_number(max_raw)
+                    min_val  = safe_number(min_raw)
+                    rain_val = safe_number(rain_raw, is_rainfall=True)
 
-                    if max_val != "":
-                        valid_max[station] = max_val
-                    if min_val != "":
-                        valid_min[station] = min_val
-                    if rain_val != "":
-                        valid_rain[station] = rain_val
-
-                    print(f"✅ {station} ➜ Max:{max_val} Min:{min_val} Rain:{rain_val}")
+                    if max_val != "":  valid_max[station]  = max_val
+                    if min_val != "":  valid_min[station]  = min_val
+                    if rain_val != "": valid_rain[station] = rain_val
                 else:
-                    unmatched_log.write(f"{date_folder} | NO MATCH: {m.group(1)}\n")
+                    unmatched_log.write(f"{date_folder} | NO MATCH: {st_raw}\n")
+
+            # ---- PASS 2: per-line fallback for wrapped rows ----
+            lines = [ln.strip() for ln in text.split("\n") if ln.strip()]
+            for i, line in enumerate(lines):
+                # Check if any known station name is in the line
+                hits = [s for s in known_stations if s in line]
+                if not hits:
+                    continue
+                station = hits[0]
+
+                # Take this line + next line (handles wrap)
+                combo = line
+                if i + 1 < len(lines):
+                    combo += " " + lines[i + 1]
+
+                # Grab the last three numeric/NA/TR tokens
+                tokens = re.findall(num, combo)
+                if len(tokens) >= 3:
+                    max_raw, min_raw, rain_raw = tokens[-3], tokens[-2], tokens[-1]
+                    max_val  = safe_number(max_raw)
+                    min_val  = safe_number(min_raw)
+                    rain_val = safe_number(rain_raw, is_rainfall=True)
+
+                    if station not in valid_max and max_val != "":   valid_max[station]  = max_val
+                    if station not in valid_min and min_val != "":   valid_min[station]  = min_val
+                    if station not in valid_rain and rain_val != "": valid_rain[station] = rain_val
 
     unmatched_log.close()
 
+    # build rows
     row_max = {"Date": actual_date, "Type": "Max"}
     row_min = {"Date": actual_date, "Type": "Min"}
     row_rain = {"Date": actual_date, "Type": "Rainfall"}
-
     for s in known_stations:
-        row_max[s] = valid_max.get(s, "")
-        row_min[s] = valid_min.get(s, "")
+        row_max[s]  = valid_max.get(s, "")
+        row_min[s]  = valid_min.get(s, "")
         row_rain[s] = valid_rain.get(s, "")
-
     new_rows.extend([row_max, row_min, row_rain])
 
 # === SAVE FINAL ===
@@ -140,13 +171,12 @@ if new_rows:
     df = df.reindex(columns=["Date", "Type"] + known_stations)
 
     def compute_stats(row):
-        # Skip NA/blank entries automatically by try/except
         nums = []
         for s in known_stations:
+            val = row.get(s, "")
+            if val in ("", "NA"):
+                continue
             try:
-                val = row[s]
-                if val == "NA" or val == "":
-                    continue
                 nums.append(float(val))
             except:
                 pass
@@ -156,8 +186,7 @@ if new_rows:
                 "Max": round(max(nums), 1),
                 "Min": round(min(nums), 1)
             })
-        else:
-            return pd.Series({"Average": "", "Max": "", "Min": ""})
+        return pd.Series({"Average": "", "Max": "", "Min": ""})
 
     stats = df.apply(compute_stats, axis=1)
     df = pd.concat([df, stats], axis=1)
