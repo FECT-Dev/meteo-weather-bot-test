@@ -18,31 +18,37 @@ known_stations = [
     "Mullaitivu"
 ]
 
-# Common aliases seen in PDFs
+# Aliases seen in PDFs
 station_aliases = {
     "Maha llluppallama": "Maha Illuppallama",
     "Ratmalana": "Rathmalana",
     "Ratnapura": "Rathnapura",
     "Kurunagala": "Kurunegala",
+    "Katugashota": "Katugasthota",
 }
+
+# One cell can be a number or NA / TRACE / TR (with possible punctuation/space between T and R)
+TOKEN = r"(?:(?i:NA|TRACE|T\W*R)|\d+(?:\.\d+)?)"
+TOKEN_RE = re.compile(TOKEN)
 
 def safe_number(v, is_rainfall=False):
     raw = str(v).strip()
     up = raw.upper()
-    # keep NA as-is
-    if "NA" in up:
-        return "NA"
-    # map TR/TRACE to 0.01
-    if "TR" in up or "TRACE" in up:
-        return "0.01"
-    # map dashes to 0.0 (how dept prints “no rain” sometimes)
-    if up in ["-", "--"]:
-        return "0.0"
+    # Reduce to letters to catch variants like "T R", "T.R", etc.
+    letters_only = re.sub(r"[^A-Z]", "", up)
 
-    # fix common OCR confusions
+    if letters_only == "NA":
+        return "NA"
+    if letters_only in ("TR", "TRACE"):
+        return "0.01"
+
+    # dept sometimes prints dashes
+    if up in ["-", "--"]:
+        return "0.0" if is_rainfall else ""
+
+    # OCR fixes
     cleaned = raw.replace("O", "0").replace("|", "1").replace("I", "1").replace("l", "1")
     cleaned = re.sub(r"[^\d.]", "", cleaned)
-
     if cleaned in ("", "."):
         return ""
 
@@ -64,6 +70,21 @@ def match_station(name):
             if s.lower() == best[0]:
                 return s
     return None
+
+def meteorological_block(text: str) -> str:
+    """Extract only the Meteorological Stations table block."""
+    low = text.lower()
+    start = low.find("meteorological stations")
+    if start == -1:
+        start = 0
+    # stop before other sections if present
+    stops = []
+    for marker in ["hydro catchment areas", "rainfall stations", "other rainfall stations"]:
+        p = low.find(marker, start + 1)
+        if p != -1:
+            stops.append(p)
+    end = min(stops) if stops else len(text)
+    return text[start:end]
 
 new_rows = []
 
@@ -94,64 +115,50 @@ for date_folder in sorted(os.listdir(reports_folder)):
         print(f"❌ Date parse error: {e}")
 
     valid_max, valid_min, valid_rain = {}, {}, {}
-    unmatched_log = open(os.path.join(folder, "unmatched_stations.log"), "a", encoding="utf-8")
+    log_path = os.path.join(folder, "unmatched_stations.log")
+    unmatched_log = open(log_path, "a", encoding="utf-8")
 
     with pdfplumber.open(pdf) as pdf_obj:
         for page in pdf_obj.pages:
-            text = page.extract_text() or ""
+            full_text = page.extract_text() or ""
+            text = meteorological_block(full_text)
 
-            # ---- PASS 1: wide regex across the page ----
-            # Allow integers or decimals, plus NA/TR in any slot.
-            num = r"(?:NA|TR|\d+(?:\.\d+)?)"
-            pattern = rf"([A-Za-z][A-Za-z ]+?)\s+{num}\s+{num}\s+{num}"
-            for m in re.finditer(pattern, text):
-                st_raw = m.group(1)
-                vals = re.findall(num, m.group(0))
-                if len(vals) < 3:
-                    continue
-                max_raw, min_raw, rain_raw = vals[:3]
-
+            # PASS A: structured capture — Station, Max, Min, Rainfall
+            patt = re.compile(rf"([A-Za-z][A-Za-z ]+?)\s+({TOKEN})\s+({TOKEN})\s+({TOKEN})")
+            for m in patt.finditer(text):
+                st_raw, max_raw, min_raw, rain_raw = m.group(1, 2, 3, 4)
                 station = match_station(st_raw)
-                if not station:
-                    # try to trim trailing spaces and re-match
-                    station = match_station(st_raw.split()[-1])
-
                 if station:
                     max_val  = safe_number(max_raw)
                     min_val  = safe_number(min_raw)
                     rain_val = safe_number(rain_raw, is_rainfall=True)
-
                     if max_val != "":  valid_max[station]  = max_val
                     if min_val != "":  valid_min[station]  = min_val
                     if rain_val != "": valid_rain[station] = rain_val
                 else:
                     unmatched_log.write(f"{date_folder} | NO MATCH: {st_raw}\n")
 
-            # ---- PASS 2: per-line fallback for wrapped rows ----
+            # PASS B: line-wrap fallback — use next line as continuation
             lines = [ln.strip() for ln in text.split("\n") if ln.strip()]
             for i, line in enumerate(lines):
-                # Check if any known station name is in the line
-                hits = [s for s in known_stations if s in line]
-                if not hits:
+                # direct station hit
+                hit = next((s for s in known_stations if s in line), None)
+                if not hit:
                     continue
-                station = hits[0]
 
-                # Take this line + next line (handles wrap)
-                combo = line
-                if i + 1 < len(lines):
-                    combo += " " + lines[i + 1]
-
-                # Grab the last three numeric/NA/TR tokens
-                tokens = re.findall(num, combo)
+                combo = line + (" " + lines[i + 1] if i + 1 < len(lines) else "")
+                # Only look to the right of the station name
+                right = combo.split(hit, 1)[1] if hit in combo else combo
+                tokens = TOKEN_RE.findall(right)
                 if len(tokens) >= 3:
-                    max_raw, min_raw, rain_raw = tokens[-3], tokens[-2], tokens[-1]
+                    max_raw, min_raw, rain_raw = tokens[0], tokens[1], tokens[2]
                     max_val  = safe_number(max_raw)
                     min_val  = safe_number(min_raw)
                     rain_val = safe_number(rain_raw, is_rainfall=True)
 
-                    if station not in valid_max and max_val != "":   valid_max[station]  = max_val
-                    if station not in valid_min and min_val != "":   valid_min[station]  = min_val
-                    if station not in valid_rain and rain_val != "": valid_rain[station] = rain_val
+                    if hit not in valid_max and max_val != "":   valid_max[hit]  = max_val
+                    if hit not in valid_min and min_val != "":   valid_min[hit]  = min_val
+                    if hit not in valid_rain and rain_val != "": valid_rain[hit] = rain_val
 
     unmatched_log.close()
 
