@@ -87,8 +87,10 @@ def meteorological_block(text: str) -> str:
 
 def add_na_rows_for_missing_dates(new_rows, summary_file):
     """Ensure every date from the earliest known to yesterday exists; fill gaps with NA rows."""
+    # Dates we just parsed (use only "Max" rows to count per-day presence)
     parsed_dates = {r["Date"] for r in new_rows if r.get("Type") == "Max"}
 
+    # Dates already in CSV (if any)
     existing_dates = set()
     if os.path.exists(summary_file):
         try:
@@ -100,20 +102,23 @@ def add_na_rows_for_missing_dates(new_rows, summary_file):
 
     all_known = parsed_dates | existing_dates
     if not all_known:
-        return new_rows
+        return new_rows  # nothing to infer
 
     start_dt = min(datetime.strptime(d, "%Y-%m-%d").date() for d in all_known)
-    end_dt = (datetime.now() - timedelta(days=1)).date()
+    end_dt = (datetime.now() - timedelta(days=1)).date()  # yesterday (since PDF date shifts by -1)
 
+    # All expected dates from start to yesterday
     expected = {
         (start_dt + timedelta(days=i)).strftime("%Y-%m-%d")
         for i in range((end_dt - start_dt).days + 1)
     }
 
     missing = sorted(expected - all_known)
+
     if not missing:
         return new_rows
 
+    # Append NA rows for each missing date
     for d in missing:
         row_max = {"Date": d, "Type": "Max"}
         row_min = {"Date": d, "Type": "Min"}
@@ -199,17 +204,14 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
     unmatched_log.close()
 
-    # Build rows for this date (default NA if missing/empty)
+    # Build rows for this date
     row_max = {"Date": actual_date, "Type": "Max"}
     row_min = {"Date": actual_date, "Type": "Min"}
     row_rain = {"Date": actual_date, "Type": "Rainfall"}
     for s in known_stations:
-        v_max = valid_max.get(s, "NA")
-        v_min = valid_min.get(s, "NA")
-        v_rain = valid_rain.get(s, "NA")
-        row_max[s]  = v_max if v_max != "" else "NA"
-        row_min[s]  = v_min if v_min != "" else "NA"
-        row_rain[s] = v_rain if v_rain != "" else "NA"
+        row_max[s]  = valid_max.get(s, "")
+        row_min[s]  = valid_min.get(s, "")
+        row_rain[s] = valid_rain.get(s, "")
     new_rows.extend([row_max, row_min, row_rain])
 
 # Fill any missing dates between earliest known and yesterday with NA rows
