@@ -18,7 +18,7 @@ known_stations = [
     "Mullaitivu"
 ]
 
-# ✅ Fix common OCR spelling issues
+# Fix common OCR spelling issues
 station_aliases = {
     "Maha llluppallama": "Maha Illuppallama",
     "Ratmalana": "Rathmalana",
@@ -26,17 +26,26 @@ station_aliases = {
 }
 
 def safe_number(v, is_rainfall=False):
-    v = str(v).upper().strip()
-    if "TR" in v or "TRACE" in v.lower():
-        return "0.1"
-    if v in ["-", "--"]:
+    # Preserve NA and map TR -> 0.01
+    raw = str(v).strip()
+    up = raw.upper()
+    if "NA" in up:
+        return "NA"
+    if "TR" in up or "TRACE" in up:
+        return "0.01"
+
+    if up in ["-", "--"]:
         return "0.0"
-    v = v.replace("O", "0").replace("|", "1").replace("I", "1").replace("l", "1")
-    v = re.sub(r"[^\d.]", "", v)
-    if not v or v == ".":
+
+    # Clean typical OCR artifacts
+    cleaned = raw.replace("O", "0").replace("|", "1").replace("I", "1").replace("l", "1")
+    cleaned = re.sub(r"[^\d.]", "", cleaned)
+
+    if not cleaned or cleaned == ".":
         return ""
+
     try:
-        f = float(v)
+        f = float(cleaned)
         if not is_rainfall and (f < -10 or f > 60):
             return ""
         return str(f)
@@ -67,17 +76,17 @@ for date_folder in sorted(os.listdir(reports_folder)):
 
     print(f"\n📂 Processing: {pdf}")
 
+    # Derive actual date (publish date minus 1)
     actual_date = date_folder
     try:
         with open(pdf, "rb") as f:
             reader = PyPDF2.PdfReader(f)
-            text = "".join(page.extract_text() or "" for page in reader.pages)
-            date_match = re.search(r"(\d{4}[./-]\d{2}[./-]\d{2})", text)
+            text_all = "".join(page.extract_text() or "" for page in reader.pages)
+            date_match = re.search(r"(\d{4}[./-]\d{2}[./-]\d{2})", text_all)
             if date_match:
                 header_date = date_match.group(0).replace("/", "-").replace(".", "-")
                 published = datetime.strptime(header_date, "%Y-%m-%d")
-                shifted = published - timedelta(days=1)
-                actual_date = shifted.strftime("%Y-%m-%d")
+                actual_date = (published - timedelta(days=1)).strftime("%Y-%m-%d")
                 print(f"📅 PDF date: {header_date} → Shifted to: {actual_date}")
             else:
                 print("⚠️ No date found, using folder date.")
@@ -85,25 +94,29 @@ for date_folder in sorted(os.listdir(reports_folder)):
         print(f"❌ Date parse error: {e}")
 
     valid_max, valid_min, valid_rain = {}, {}, {}
-    unmatched_log = open(os.path.join(folder, "unmatched_stations.log"), "a")
+    unmatched_log = open(os.path.join(folder, "unmatched_stations.log"), "a", encoding="utf-8")
 
     with pdfplumber.open(pdf) as pdf_obj:
         for page in pdf_obj.pages:
             text = page.extract_text() or ""
 
-            # ✅ Extract Max, Min, and Rainfall from single line
-            for m in re.finditer(r"([A-Za-z][A-Za-z ]+?)\s+(\d+\.\d+)\s+(\d+\.\d+)\s+(TR|\d+\.\d+)", text):
+            # Capture: Station  Max  Min  Rainfall
+            # Allow NA in any numeric slot; rainfall also allows TR.
+            pattern = r"([A-Za-z][A-Za-z ]+?)\s+(NA|\d+\.\d+)\s+(NA|\d+\.\d+)\s+(NA|TR|\d+\.\d+)"
+            for m in re.finditer(pattern, text):
                 station = match_station(m.group(1))
                 if station:
                     max_val = safe_number(m.group(2))
                     min_val = safe_number(m.group(3))
                     rain_val = safe_number(m.group(4), is_rainfall=True)
-                    if max_val:
+
+                    if max_val != "":
                         valid_max[station] = max_val
-                    if min_val:
+                    if min_val != "":
                         valid_min[station] = min_val
-                    if rain_val:
+                    if rain_val != "":
                         valid_rain[station] = rain_val
+
                     print(f"✅ {station} ➜ Max:{max_val} Min:{min_val} Rain:{rain_val}")
                 else:
                     unmatched_log.write(f"{date_folder} | NO MATCH: {m.group(1)}\n")
@@ -127,10 +140,14 @@ if new_rows:
     df = df.reindex(columns=["Date", "Type"] + known_stations)
 
     def compute_stats(row):
+        # Skip NA/blank entries automatically by try/except
         nums = []
         for s in known_stations:
             try:
-                nums.append(float(row[s]))
+                val = row[s]
+                if val == "NA" or val == "":
+                    continue
+                nums.append(float(val))
             except:
                 pass
         if nums:
