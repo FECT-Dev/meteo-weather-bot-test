@@ -2,7 +2,7 @@ name: Daily Weather PDF Download & Summary
 
 on:
   schedule:
-    - cron: '40 9 * * *'   # Runs daily at 03:00 UTC
+    - cron: '30 9 * * *'   # Runs daily at 03:00 UTC
   workflow_dispatch:
 
 jobs:
