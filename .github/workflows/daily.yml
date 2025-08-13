@@ -1,0 +1,8 @@
+- name: Build hydrocatchment summary (from existing PDFs)
+  run: |
+    python -V
+    pip install -r requirements.txt
+    echo "Running hydro summary from saved PDFs…"
+    python update_hydro_summary_v2.py
+    echo "Result files:"
+    ls -la hydrocatchment_summary.csv || true
