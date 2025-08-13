@@ -1,11 +1,11 @@
-# update_hydro_summary.py  (FINAL)
+# update_hydro_summary_v4.py (FINAL)
 import os, re, warnings
 import pandas as pd
 import pdfplumber, PyPDF2
 from datetime import datetime, timedelta
 from typing import Dict, List
 
-# Prefer Camelot for table parsing; fallback to text
+# Prefer Camelot (table-aware). Fall back to text if not available.
 try:
     import camelot
     HAVE_CAMELOT = True
@@ -16,7 +16,7 @@ except Exception:
 REPORTS_DIR = "reports"
 OUTPUT_CSV  = "hydrocatchment_summary.csv"
 
-# === Fixed English station columns (order) ===
+# Fixed English station columns (order)
 STATIONS = [
     "Castlereigh", "Norton", "Maussakele", "Canyon", "Lakshapana",
     "Upper Kotmale", "Kotmale", "Victoria", "Randenigala", "Rantambe",
@@ -27,7 +27,7 @@ STATIONS = [
 def _key(s: str) -> str:
     return re.sub(r"[^a-z]", "", (s or "").lower())
 
-# Common variants -> canonical English
+# Spelling/variant map -> canonical English
 ALIASES = {
     "castlereigh": "Castlereigh", "castlereagh": "Castlereigh",
     "norton": "Norton",
@@ -42,9 +42,9 @@ ALIASES = {
     "rantambe": "Rantambe", "randambe": "Rantambe",
     "bowatenna": "Bowatenna", "bowatanna": "Bowatenna", "bowathenna": "Bowatenna",
     "ukuwela": "Ukuwela", "ukuwella": "Ukuwela",
-    "samanalawewa": "Samanala Wewa", "samanalawawa": "Samanala Wewa", "samanalawewa": "Samanala Wewa",
+    "samanalawewa": "Samanala Wewa", "samanalawawa": "Samanala Wewa",
     "kukuleganga": "Kukuleganga", "kukuleganaga": "Kukuleganga", "kukule ganga": "Kukuleganga",
-    "maskeliyadom": "Maskeliya (DOM)", "maskeliya": "Maskeliya (DOM)", "maskeliya(dom)": "Maskeliya (DOM)", "maskeliyad o m": "Maskeliya (DOM)",
+    "maskeliyadom": "Maskeliya (DOM)", "maskeliya(dom)": "Maskeliya (DOM)", "maskeliya": "Maskeliya (DOM)",
     "inginiyagala": "Inginiyagala",
 }
 ALLOWED = set(STATIONS)
@@ -83,7 +83,7 @@ def norm_val(v: str) -> str:
         return ""
 
 def actual_date_from_pdf(pdf_path: str, fallback: str) -> str:
-    """Header date − 1 day; fallback to folder date (YYYY-MM-DD)."""
+    """Header date minus 1 day; fallback to folder date (YYYY-MM-DD)."""
     out = fallback
     try:
         with open(pdf_path, "rb") as f:
@@ -122,9 +122,9 @@ def parse_hydro_with_camelot(pdf_path: str, pages: List[int]) -> Dict[str, str]:
 
     for tb in tables:
         df = tb.df.replace(r"\s+", " ", regex=True).fillna("")
-        # drop header-ish rows
-        hdr_mask = df.apply(lambda r: r.astype(str).str.lower().str.contains("hydro|rainfall stations|mm|area").any(), axis=1)
-        df = df[~hdr_mask]
+        # remove header-ish rows
+        mask = df.apply(lambda r: r.astype(str).str.lower().str.contains("hydro|rainfall stations|mm|area").any(), axis=1)
+        df = df[~mask]
         for _, row in df.iterrows():
             cells = [c.strip() for c in row.tolist() if c.strip()]
             i = 0
@@ -157,7 +157,7 @@ def parse_hydro_with_text(pdf_path: str, pages: List[int]) -> Dict[str, str]:
             text = page.extract_text() or ""
             low = text.lower()
             s = low.find("hydro catchment")
-            if s == -1:
+            if s == -1: 
                 continue
             e = min([x for x in [
                 low.find("meteorological stations", s+1),
@@ -183,7 +183,7 @@ def compute_stats(row: dict) -> None:
     nums = []
     for s in STATIONS:
         v = row.get(s, "")
-        if v in ("", "NA"):
+        if v in ("", "NA"): 
             continue
         try:
             nums.append(float(v))
@@ -202,7 +202,7 @@ def main():
 
     for date_folder in sorted(os.listdir(REPORTS_DIR)):
         folder = os.path.join(REPORTS_DIR, date_folder)
-        if not os.path.isdir(folder):
+        if not os.path.isdir(folder): 
             continue
         pdf_path = os.path.join(folder, f"weather-{date_folder}.pdf")
         if not os.path.exists(pdf_path):
@@ -213,11 +213,9 @@ def main():
             continue
 
         data: Dict[str, str] = {}
-        d1 = parse_hydro_with_camelot(pdf_path, pages)
-        data.update(d1)
+        data.update(parse_hydro_with_camelot(pdf_path, pages))
         if not data:
-            d2 = parse_hydro_with_text(pdf_path, pages)
-            data.update(d2)
+            data.update(parse_hydro_with_text(pdf_path, pages))
 
         act_date = actual_date_from_pdf(pdf_path, date_folder)
 
@@ -246,5 +244,5 @@ def main():
     print(f"[hydro] Saved {OUTPUT_CSV} — {len(df)} rows")
 
 if __name__ == "__main__":
-    print(f"[hydro] CWD={os.getcwd()} reports={os.path.abspath(REPORTS_DIR)}")
+    print(f"[hydro] CWD={os.getcwd()}  reports={os.path.abspath(REPORTS_DIR)}")
     main()
