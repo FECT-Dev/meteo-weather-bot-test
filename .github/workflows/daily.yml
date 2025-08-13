@@ -21,7 +21,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      # Camelot needs ghostscript (and poppler-utils is handy for PDFs)
+      # Camelot needs ghostscript; poppler-utils is useful for PDFs
       - name: Install OS deps
         run: |
           sudo apt-get update
