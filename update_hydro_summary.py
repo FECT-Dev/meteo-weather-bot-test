@@ -1,11 +1,11 @@
-# update_hydro_summary_v4.py (FINAL)
+# update_hydro_summary.py (Date, stations..., Total, Max, Min)
 import os, re, warnings
 import pandas as pd
 import pdfplumber, PyPDF2
 from datetime import datetime, timedelta
 from typing import Dict, List
 
-# Prefer Camelot (table-aware). Fall back to text if not available.
+# Prefer Camelot for table parsing; fallback to text
 try:
     import camelot
     HAVE_CAMELOT = True
@@ -183,19 +183,18 @@ def compute_stats(row: dict) -> None:
     nums = []
     for s in STATIONS:
         v = row.get(s, "")
-        if v in ("", "NA"): 
+        if v in ("", "NA"):
             continue
         try:
             nums.append(float(v))
         except Exception:
             pass
     if nums:
-        row["Total"]   = round(sum(nums), 1)
-        row["Average"] = round(sum(nums)/len(nums), 1)
-        row["Max"]     = round(max(nums), 1)
-        row["Min"]     = round(min(nums), 1)
+        row["Total"] = round(sum(nums), 1)
+        row["Max"]   = round(max(nums), 1)
+        row["Min"]   = round(min(nums), 1)
     else:
-        row["Total"] = row["Average"] = row["Max"] = row["Min"] = ""
+        row["Total"] = row["Max"] = row["Min"] = ""
 
 def main():
     rows: List[dict] = []
@@ -229,19 +228,29 @@ def main():
         print("[hydro] No rows produced.")
         return
 
-    df_new = pd.DataFrame(rows)
-    df_new = df_new.reindex(columns=["Date"] + STATIONS + ["Total","Average","Max","Min"])
+    # Build new DF in required order: Date, stations..., Total, Max, Min
+    ordered_cols = ["Date"] + STATIONS + ["Total", "Max", "Min"]
+    df_new = pd.DataFrame(rows).reindex(columns=ordered_cols)
 
+    # Merge with old CSV; drop any legacy "Average" column, then enforce order
     if os.path.exists(OUTPUT_CSV):
         old = pd.read_csv(OUTPUT_CSV)
+        if "Average" in old.columns:
+            old = old.drop(columns=["Average"])
+        # ensure all required columns exist
+        for c in ordered_cols:
+            if c not in old.columns:
+                old[c] = ""  # backfill missing
+        old = old[ordered_cols]
         df = pd.concat([old, df_new], ignore_index=True)
         df.drop_duplicates(subset=["Date"], keep="last", inplace=True)
+        df = df[ordered_cols]
     else:
         df = df_new
 
     df.sort_values(["Date"], inplace=True, ignore_index=True)
     df.to_csv(OUTPUT_CSV, index=False)
-    print(f"[hydro] Saved {OUTPUT_CSV} — {len(df)} rows")
+    print(f"[hydro] Saved {OUTPUT_CSV} — {len(df)} rows, columns={list(df.columns)}")
 
 if __name__ == "__main__":
     print(f"[hydro] CWD={os.getcwd()}  reports={os.path.abspath(REPORTS_DIR)}")
