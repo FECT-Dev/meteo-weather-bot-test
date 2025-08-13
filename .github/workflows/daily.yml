@@ -21,7 +21,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      # Camelot (lattice) needs ghostscript; poppler-utils is handy for PDFs
+      # Camelot needs ghostscript (and poppler-utils is handy for PDFs)
       - name: Install OS deps
         run: |
           sudo apt-get update
@@ -36,24 +36,8 @@ jobs:
       - name: Build hydrocatchment summary from saved PDFs
         run: |
           set -e
-          echo "Repo root:"
           ls -la
-          echo "Looking for hydro script…"
-          # Prefer v3, then v2, then any *hydro*.py
-          SCRIPT="$(ls -1 update_hydro_summary_v3.py 2>/dev/null || true)"
-          if [ -z "$SCRIPT" ]; then
-            SCRIPT="$(ls -1 update_hydro_summary_v2.py 2>/dev/null || true)"
-          fi
-          if [ -z "$SCRIPT" ]; then
-            SCRIPT="$(ls -1 *hydro*.py 2>/dev/null | head -n1 || true)"
-          fi
-          if [ -z "$SCRIPT" ]; then
-            echo "❌ No hydro script found. Add update_hydro_summary_v3.py to repo root."
-            exit 1
-          fi
-          echo "Using script: $SCRIPT"
-          python "$SCRIPT"
-          echo "Result files:"
+          python update_hydro_summary_v4.py
           ls -la hydrocatchment_summary.csv || true
 
       - name: Commit & push (if changed)
