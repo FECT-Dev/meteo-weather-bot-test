@@ -37,7 +37,11 @@ jobs:
         run: |
           set -e
           ls -la
-          python update_hydro_summary_v4.py
+          echo "Hydro parser:"
+          ls -1 *hydro*.py || true
+          # Run the script that exists in your repo:
+          python update_hydro_summary.py
+          echo "Result files:"
           ls -la hydrocatchment_summary.csv || true
 
       - name: Commit & push (if changed)
