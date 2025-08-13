@@ -1,0 +1,36 @@
+name: Build hydro table (daily)
+
+on:
+  schedule:
+    - cron: "10 2 * * *"    # runs 02:10 UTC daily (adjust as you like)
+  workflow_dispatch:
+
+jobs:
+  hydro:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Build hydrocatchment summary from saved PDFs
+        run: |
+          python -V
+          echo "Running hydro summary from reports/…"
+          python update_hydro_summary_v2.py
+          echo "Result files:"
+          ls -la hydrocatchment_summary.csv || true
+
+      - name: Commit & push (if changed)
+        run: |
+          git config user.email "actions@github.com"
+          git config user.name "github-actions"
+          git add -A
+          git diff --quiet && echo "No changes." || (git commit -m "Update hydrocatchment_summary.csv" && git push)
