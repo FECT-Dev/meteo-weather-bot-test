@@ -2,8 +2,11 @@ name: Build hydro table (daily)
 
 on:
   schedule:
-    - cron: "10 2 * * *"    # runs 02:10 UTC daily (adjust as you like)
+    - cron: "10 2 * * *"   # runs 02:10 UTC daily
   workflow_dispatch:
+
+permissions:
+  contents: write           # needed to push changes
 
 jobs:
   hydro:
@@ -18,13 +21,22 @@ jobs:
           python-version: "3.11"
 
       - name: Install deps
-        run: pip install -r requirements.txt
+        run: |
+          python -V
+          pip install --upgrade pip
+          pip install -r requirements.txt
 
       - name: Build hydrocatchment summary from saved PDFs
         run: |
-          python -V
+          set -e
           echo "Running hydro summary from reports/…"
-          python update_hydro_summary_v2.py
+          # auto-detect the script in case the file has a leading word/space
+          SCRIPT="$(ls -1 *update_hydro_summary_v2*.py 2>/dev/null | head -n1 || true)"
+          if [ -z "$SCRIPT" ]; then
+            SCRIPT="update_hydro_summary_v2.py"
+          fi
+          echo "Using script: $SCRIPT"
+          python "$SCRIPT"
           echo "Result files:"
           ls -la hydrocatchment_summary.csv || true
 
@@ -32,5 +44,10 @@ jobs:
         run: |
           git config user.email "actions@github.com"
           git config user.name "github-actions"
-          git add -A
-          git diff --quiet && echo "No changes." || (git commit -m "Update hydrocatchment_summary.csv" && git push)
+          git add hydrocatchment_summary.csv
+          if git diff --cached --quiet; then
+            echo "No changes."
+          else
+            git commit -m "Update hydrocatchment_summary.csv ($(date -u +%Y-%m-%d))"
+            git push
+          fi
