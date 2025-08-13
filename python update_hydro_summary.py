@@ -11,6 +11,10 @@ REPORTS_DIR = "reports"
 OUTPUT_CSV = "hydrocatchment_summary.csv"
 VARIABLE_NAME = "Rainfall"  # shown in the table's "Variable" column
 
+# Fail fast if we don't see the repo root
+print(f"[hydro] CWD={os.getcwd()}")
+print(f"[hydro] Looking for reports in: {os.path.abspath(REPORTS_DIR)}")
+
 # Recognize values like numbers, NA, TRACE, TR (with possible punctuation/spacing)
 TOKEN = r"(?:(?i:NA|TRACE|T\W*R)|\d+(?:\.\d+)?)"
 TOKEN_RE = re.compile(TOKEN)
@@ -207,18 +211,24 @@ def main():
     new_rows: List[dict] = []
     station_union: Set[str] = set()
 
-    for date_folder in sorted(os.listdir(REPORTS_DIR)):
+    date_folders = [d for d in sorted(os.listdir(REPORTS_DIR)) if os.path.isdir(os.path.join(REPORTS_DIR, d))]
+print(f"[hydro] Found {len(date_folders)} date folders under reports/")
+for date_folder in date_folders:
         folder = os.path.join(REPORTS_DIR, date_folder)
         if not os.path.isdir(folder):
             continue
         pdf_path = os.path.join(folder, f"weather-{date_folder}.pdf")
         if not os.path.exists(pdf_path):
+            print(f"[hydro] Skipping {date_folder}: missing {pdf_path}")
             continue
+        else:
+            print(f"[hydro] Using PDF: {pdf_path}")
 
         # Actual data date = header date - 1 day (e.g., 10-08-2025 means 2025-08-09)
         actual_date = extract_pdf_date(pdf_path, date_folder)
 
         data = collect_from_pdf(pdf_path)
+        print(f"[hydro] Parsed {len(data)} hydro stations for {actual_date}")
         station_union.update(data.keys())
 
         row = {"Date": actual_date, "Variable": VARIABLE_NAME}
@@ -263,7 +273,9 @@ def main():
 
     df.sort_values(["Date"], inplace=True, ignore_index=True)
     df.to_csv(OUTPUT_CSV, index=False)
-    print(f"Saved: {OUTPUT_CSV} — {len(df)} rows, {len(station_cols)} stations")
+    print(f"[hydro] Saved: {OUTPUT_CSV} — {len(df)} rows, {len(station_cols)} stations")
+else:
+    print("[hydro] No rows produced — did we have any PDFs in reports/?")
 
 
 if __name__ == "__main__":
