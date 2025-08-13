@@ -2,15 +2,16 @@ name: Build hydro table (daily)
 
 on:
   schedule:
-    - cron: "10 2 * * *"   # runs 02:10 UTC daily
+    - cron: "10 2 * * *"   # 02:10 UTC daily
   workflow_dispatch:
 
 permissions:
-  contents: write           # allow pushing CSV updates
+  contents: write
 
 jobs:
   hydro:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -20,7 +21,13 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install deps
+      # Camelot (lattice) needs ghostscript; poppler-utils is handy for PDFs
+      - name: Install OS deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ghostscript poppler-utils
+
+      - name: Install pip deps
         run: |
           python -V
           pip install --upgrade pip
@@ -32,10 +39,17 @@ jobs:
           echo "Repo root:"
           ls -la
           echo "Looking for hydro script…"
-          # auto-detect the script in case the file had a leading word/space
-          SCRIPT="$(ls -1 *update_hydro_summary_v2*.py *hydro*.py 2>/dev/null | head -n1 || true)"
+          # Prefer v3, then v2, then any *hydro*.py
+          SCRIPT="$(ls -1 update_hydro_summary_v3.py 2>/dev/null || true)"
           if [ -z "$SCRIPT" ]; then
-            SCRIPT="update_hydro_summary_v2.py"
+            SCRIPT="$(ls -1 update_hydro_summary_v2.py 2>/dev/null || true)"
+          fi
+          if [ -z "$SCRIPT" ]; then
+            SCRIPT="$(ls -1 *hydro*.py 2>/dev/null | head -n1 || true)"
+          fi
+          if [ -z "$SCRIPT" ]; then
+            echo "❌ No hydro script found. Add update_hydro_summary_v3.py to repo root."
+            exit 1
           fi
           echo "Using script: $SCRIPT"
           python "$SCRIPT"
