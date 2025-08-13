@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write           # needed to push changes
+  contents: write           # allow pushing CSV updates
 
 jobs:
   hydro:
@@ -29,9 +29,11 @@ jobs:
       - name: Build hydrocatchment summary from saved PDFs
         run: |
           set -e
-          echo "Running hydro summary from reports/…"
-          # auto-detect the script in case the file has a leading word/space
-          SCRIPT="$(ls -1 *update_hydro_summary_v2*.py 2>/dev/null | head -n1 || true)"
+          echo "Repo root:"
+          ls -la
+          echo "Looking for hydro script…"
+          # auto-detect the script in case the file had a leading word/space
+          SCRIPT="$(ls -1 *update_hydro_summary_v2*.py *hydro*.py 2>/dev/null | head -n1 || true)"
           if [ -z "$SCRIPT" ]; then
             SCRIPT="update_hydro_summary_v2.py"
           fi
