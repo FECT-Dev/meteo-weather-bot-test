@@ -21,7 +21,7 @@ VARIABLE    = "Rainfall"
 STATIONS = [
     "Castlereigh", "Norton", "Maussakele", "Canyon", "Lakshapana",
     "Upper Kotmale", "Kotmale", "Victoria", "Randenigala", "Rantambe",
-    "Bowatenna", "Ukuwela", "Samanala Wewa", "Kukuleganga", "Maskeliya (DOM)"
+    "Bowatenna", "Ukuwela", "Samanala Wewa", "Kukuleganga", "Maskeliya (DOM)","Inginiyagala "
 ]
 
 # Map common variants -> canonical English station name
