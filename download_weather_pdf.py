@@ -49,7 +49,7 @@ try:
         print(f"⚠️ Could not switch language: {e}")
 
     # Click Weather Data
-    weather_data_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Weather Data')]")))
+    weather_data_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Agromet / Weather Data')]")))
     weather_data_button.click()
     print("📂 Clicked Weather Data.")
 
