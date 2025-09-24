@@ -5,17 +5,21 @@ on:
     - cron: '30 9 * * *'   # Runs daily at 09:30 UTC
   workflow_dispatch:
 
+permissions:
+  contents: write   # <-- allow pushing with GITHUB_TOKEN
+
 jobs:
   daily-weather:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📥 Checkout repository
+      - name: 📥 Checkout repository (uses GITHUB_TOKEN)
         uses: actions/checkout@v4
         with:
-          persist-credentials: false   # we'll use our own PAT
+          fetch-depth: 0            # so pulls/merges work
+          persist-credentials: true # default; ensures pushes use GITHUB_TOKEN
 
-      - name: 🔑 Configure Git identity
+      - name: 🔧 Set Git identity
         run: |
           git config --global user.name "Auto Commit Bot"
           git config --global user.email "actions@github.com"
@@ -71,22 +75,16 @@ jobs:
           git status
           git diff --stat || true
 
-      - name: ✅ Commit & push updated weather report & summary
-        env:
-          TOKEN: ${{ secrets.ACTIONS_PAT }}
+      - name: ✅ Commit & push updated weather report & summary (using GITHUB_TOKEN)
         run: |
-          # Ensure we're on main and up to date
           git fetch origin main || true
           git checkout -B main
           git pull --ff-only origin main || true
 
-          # Stage changes (ignore if nothing present)
           git add reports/ weather_summary.csv || true
-
           if git diff --cached --quiet; then
             echo "✅ No changes to commit."
           else
             git commit -m "Add weather report and update summary for $(date +%Y-%m-%d)"
-            # Push using PAT explicitly to avoid auth issues with origin
-            git push https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git HEAD:main
+            git push origin HEAD:main   # uses GITHUB_TOKEN automatically
           fi
