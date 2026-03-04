@@ -44,7 +44,7 @@ try:
         )
         english_link.click()
         time.sleep(2)
-        print("🌐 Switched to English.")
+        print("Switched to English.")
     except Exception as e:
         print("English button not found, continuing...")
 
