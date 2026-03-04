@@ -1,8 +1,8 @@
-name: Daily Weather PDF Download
+name: Daily Weather PDF Download & Summary
 
 on:
   schedule:
-    - cron: '30 9 * * *'   # 09:30 UTC
+    - cron: '30 9 * * *'
   workflow_dispatch:
 
 permissions:
@@ -15,6 +15,9 @@ jobs:
     steps:
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
 
       - name: 🔧 Set Git identity
         run: |
@@ -24,42 +27,48 @@ jobs:
       - name: 🐍 Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.x'
 
-      # Install Google Chrome
-      - name: 🌐 Install Google Chrome
+      # ✅ UPDATED: Added Chrome installation here
+      - name: ⚙️ Install system dependencies (including Chrome)
         run: |
           sudo apt-get update
-          sudo apt-get install -y wget unzip
+          sudo apt-get install -y ghostscript python3-tk tesseract-ocr poppler-utils libtesseract-dev wget unzip
           wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
           sudo apt install -y ./google-chrome-stable_current_amd64.deb
 
-      # Install Python dependencies
-      - name: 📦 Install dependencies
+      - name: 📦 Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install selenium chromedriver-autoinstaller
+          pip install pdfplumber camelot-py[cv] pdf2image pytesseract PyPDF2 selenium chromedriver-autoinstaller pillow
 
-      - name: 📄 Run Selenium download script
+      - name: 📄 Run the PDF download script
         run: python download_weather_pdf.py
 
-      - name: 📁 Move PDF to reports folder
+      - name: 🗃️ Move and rename the PDF to reports/YYYY-MM-DD
         run: |
           TODAY=$(date +%Y-%m-%d)
           mkdir -p reports/$TODAY
           if ls downloads/$TODAY/*.pdf 1> /dev/null 2>&1; then
             mv downloads/$TODAY/*.pdf reports/$TODAY/weather-$TODAY.pdf
-            echo "✅ Moved PDF"
+            echo "✅ Moved PDF to reports/$TODAY/"
           else
-            echo "⚠️ No PDF found"
+            echo "⚠️ No PDF downloaded. Skipping move."
           fi
 
-      - name: 📤 Commit & Push
+      - name: 📊 Run weather summary extraction
+        run: python update_weather_summary.py
+
+      - name: ✅ Commit & push updated weather report & summary
         run: |
-          git add reports/
+          git fetch origin main || true
+          git checkout -B main
+          git pull --ff-only origin main || true
+
+          git add reports/ weather_summary.csv || true
           if git diff --cached --quiet; then
-            echo "No changes"
+            echo "✅ No changes to commit."
           else
-            git commit -m "Add weather report for $(date +%Y-%m-%d)"
-            git push
+            git commit -m "Add weather report and update summary for $(date +%Y-%m-%d)"
+            git push origin HEAD:main
           fi
