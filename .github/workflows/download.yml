@@ -1,23 +1,20 @@
-name: Daily Weather PDF Download & Summary
+name: Daily Weather PDF Download
 
 on:
   schedule:
-    - cron: '30 9 * * *'   # Runs daily at 09:30 UTC
+    - cron: '30 9 * * *'   # 09:30 UTC
   workflow_dispatch:
 
 permissions:
-  contents: write   # <-- allow pushing with GITHUB_TOKEN
+  contents: write
 
 jobs:
   daily-weather:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📥 Checkout repository (uses GITHUB_TOKEN)
+      - name: 📥 Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0            # so pulls/merges work
-          persist-credentials: true # default; ensures pushes use GITHUB_TOKEN
 
       - name: 🔧 Set Git identity
         run: |
@@ -27,64 +24,42 @@ jobs:
       - name: 🐍 Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: '3.11'
 
-      - name: ⚙️ Install system dependencies for Camelot & OCR
+      # Install Google Chrome
+      - name: 🌐 Install Google Chrome
         run: |
           sudo apt-get update
-          sudo apt-get install -y ghostscript python3-tk tesseract-ocr poppler-utils libtesseract-dev
+          sudo apt-get install -y wget unzip
+          wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo apt install -y ./google-chrome-stable_current_amd64.deb
 
-      - name: 📦 Install Python dependencies
+      # Install Python dependencies
+      - name: 📦 Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pdfplumber camelot-py[cv] pdf2image pytesseract PyPDF2 selenium chromedriver-autoinstaller pillow
+          pip install selenium chromedriver-autoinstaller
 
-      - name: 🗂️ Check installed Chrome version
-        run: |
-          google-chrome --version || /opt/google/chrome/chrome --version || true
-
-      - name: ✅ Ensure chromedriver-autoinstaller is used
-        run: |
-          echo "Your script should contain:"
-          echo "  import chromedriver_autoinstaller"
-          echo "  chromedriver_autoinstaller.install()"
-
-      - name: 📄 Run the PDF download script
+      - name: 📄 Run Selenium download script
         run: python download_weather_pdf.py
 
-      - name: 🗃️ Move and rename the PDF to reports/YYYY-MM-DD
+      - name: 📁 Move PDF to reports folder
         run: |
           TODAY=$(date +%Y-%m-%d)
           mkdir -p reports/$TODAY
           if ls downloads/$TODAY/*.pdf 1> /dev/null 2>&1; then
             mv downloads/$TODAY/*.pdf reports/$TODAY/weather-$TODAY.pdf
-            echo "✅ Moved PDF to reports/$TODAY/"
+            echo "✅ Moved PDF"
           else
-            echo "⚠️ No PDF downloaded. Skipping move."
+            echo "⚠️ No PDF found"
           fi
 
-      - name: 📂 Show reports folder contents
-        run: ls -R reports/ || true
-
-      - name: 📊 Run weather summary extraction
-        run: python update_weather_summary.py
-
-      - name: ✅ Show Git status before commit
+      - name: 📤 Commit & Push
         run: |
-          echo "🔍 Git status:"
-          git status
-          git diff --stat || true
-
-      - name: ✅ Commit & push updated weather report & summary (using GITHUB_TOKEN)
-        run: |
-          git fetch origin main || true
-          git checkout -B main
-          git pull --ff-only origin main || true
-
-          git add reports/ weather_summary.csv || true
+          git add reports/
           if git diff --cached --quiet; then
-            echo "✅ No changes to commit."
+            echo "No changes"
           else
-            git commit -m "Add weather report and update summary for $(date +%Y-%m-%d)"
-            git push origin HEAD:main   # uses GITHUB_TOKEN automatically
+            git commit -m "Add weather report for $(date +%Y-%m-%d)"
+            git push
           fi
