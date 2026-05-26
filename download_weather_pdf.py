@@ -19,32 +19,27 @@ today = datetime.now().strftime('%Y-%m-%d')
 download_path = os.path.join(os.getcwd(), "downloads", today)
 os.makedirs(download_path, exist_ok=True)
 
-# Folder to move final PDF
 today_folder = os.path.join("reports", today)
 os.makedirs(today_folder, exist_ok=True)
 
 # === Chrome Options ===
 chrome_options = Options()
-chrome_options.add_argument("--headless=new")  # Headless mode
+chrome_options.add_argument("--headless=new")
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
 chrome_options.add_experimental_option("prefs", {
     "download.default_directory": download_path,
-    "plugins.always_open_pdf_externally": True  # Avoid PDF preview
+    "plugins.always_open_pdf_externally": True
 })
 
-# Temporary user data folder
 temp_user_data_dir = tempfile.mkdtemp()
 chrome_options.add_argument(f"--user-data-dir={temp_user_data_dir}")
 
 # === Initialize Driver ===
 driver = webdriver.Chrome(options=chrome_options)
-driver.set_page_load_timeout(300)  # Increase timeout to 5 minutes
+driver.set_page_load_timeout(300)
 
 def wait_for_download(folder, timeout=120):
-    """
-    Wait for a PDF to appear in the folder, up to timeout seconds.
-    """
     end_time = time.time() + timeout
     while time.time() < end_time:
         pdf_files = glob.glob(os.path.join(folder, "*.pdf"))
@@ -79,30 +74,30 @@ try:
     except Exception:
         print("English button not found, continuing...")
 
-    # === Navigate to Agromet / Weather Data ===
-    agromet_button = wait.until(
-        EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Agromet')]"))
+    # === Click "Observation" menu ===
+    observation_button = wait.until(
+        EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Observation')] | //a[contains(text(),'Observation')]"))
     )
-    agromet_button.click()
-    print("Clicked Agromet / Weather Data.")
+    observation_button.click()
+    print("Clicked Observation.")
 
-    # === Click Other Weather Data ===
-    other_weather_button = wait.until(
-        EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Other Weather Data')]"))
+    # === Click "24 Hour Weather Report" submenu item ===
+    report_button = wait.until(
+        EC.element_to_be_clickable((By.XPATH, "//a[contains(text(),'24 Hour Weather Report')] | //button[contains(text(),'24 Hour Weather Report')]"))
     )
-    other_weather_button.click()
-    print("Clicked Other Weather Data.")
+    report_button.click()
+    print("Clicked 24 Hour Weather Report submenu.")
 
-    # === Click 24 Hour Weather Report PDF ===
+    # === Click the actual PDF link on the resulting page ===
     pdf_link = wait.until(
         EC.element_to_be_clickable((By.XPATH, "//a[contains(text(),'24 Hour Weather Report')]"))
     )
     pdf_link.click()
-    print("Clicked 24 Hour Weather Report link.")
+    print("Clicked 24 Hour Weather Report PDF link.")
 
-    # === Wait for download to finish ===
+    # === Wait for download ===
     print("Waiting for PDF download to complete...")
-    pdf_files = wait_for_download(download_path, timeout=120)  # Wait up to 2 minutes
+    pdf_files = wait_for_download(download_path, timeout=120)
 
     if not pdf_files:
         print("Download failed or timed out.")
