@@ -15,6 +15,12 @@ import chromedriver_autoinstaller
 chromedriver_autoinstaller.install()
 
 # === CONFIG ===
+# ---- Configurable settings ----
+PAGE_LOAD_TIMEOUT = 45   # seconds per attempt (keep below 120)
+LOAD_ATTEMPTS = 4
+RETRY_WAIT = 20          # seconds between attempts
+# -------------------------------
+
 today = datetime.now().strftime('%Y-%m-%d')
 download_path = os.path.join(os.getcwd(), "downloads", today)
 os.makedirs(download_path, exist_ok=True)
@@ -31,13 +37,14 @@ chrome_options.add_experimental_option("prefs", {
     "download.default_directory": download_path,
     "plugins.always_open_pdf_externally": True
 })
+chrome_options.page_load_strategy = "eager"
 
 temp_user_data_dir = tempfile.mkdtemp()
 chrome_options.add_argument(f"--user-data-dir={temp_user_data_dir}")
 
 # === Initialize Driver ===
 driver = webdriver.Chrome(options=chrome_options)
-driver.set_page_load_timeout(300)
+driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
 
 def wait_for_download(folder, timeout=120):
     end_time = time.time() + timeout
@@ -50,16 +57,19 @@ def wait_for_download(folder, timeout=120):
 
 try:
     # === Open Website with Retry ===
-    max_retries = 3
-    for attempt in range(max_retries):
+    for attempt in range(LOAD_ATTEMPTS):
         try:
             driver.get("https://meteo.gov.lk/")
             break
         except Exception as e:
             print(f"Attempt {attempt+1} failed: {e}")
-            if attempt == max_retries - 1:
+            try:
+                driver.execute_script("window.stop();")
+            except Exception:
+                pass
+            if attempt == LOAD_ATTEMPTS - 1:
                 raise
-            time.sleep(5)
+            time.sleep(RETRY_WAIT)
 
     wait = WebDriverWait(driver, 20)
 
