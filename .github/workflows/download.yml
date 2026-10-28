@@ -3,7 +3,6 @@ name: Daily Weather PDF Download & Summary
 on:
   schedule:
     - cron: '30 9 * * *'
-    - cron: '30 13 * * *'   # retry run
   workflow_dispatch:
 
 permissions:
@@ -12,7 +11,6 @@ permissions:
 jobs:
   daily-weather:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
 
     steps:
       - name: Checkout repository
@@ -29,8 +27,9 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.x'
 
+      # UPDATED: Added Chrome installation here
       - name: Install system dependencies (including Chrome)
         run: |
           sudo apt-get update
@@ -44,13 +43,7 @@ jobs:
           pip install pdfplumber camelot-py[cv] pdf2image pytesseract PyPDF2 selenium chromedriver-autoinstaller pillow
 
       - name: Run the PDF download script
-        run: |
-          TODAY=$(date +%Y-%m-%d)
-          if [ -f "reports/$TODAY/weather-$TODAY.pdf" ]; then
-            echo "Today's PDF already exists. Skipping download."
-          else
-            python download_weather_pdf.py
-          fi
+        run: python download_weather_pdf.py
 
       - name: Move and rename the PDF to reports/YYYY-MM-DD
         run: |
