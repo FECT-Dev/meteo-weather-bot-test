@@ -1,8 +1,10 @@
 import os
+import sys
 import time
 import tempfile
 import shutil
 import glob
+import urllib.request
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -19,6 +21,7 @@ chromedriver_autoinstaller.install()
 PAGE_LOAD_TIMEOUT = 45   # seconds per attempt (keep below 120)
 LOAD_ATTEMPTS = 4
 RETRY_WAIT = 20          # seconds between attempts
+PROXY_SERVER = ""        # e.g. "http://host:port" (leave empty for no proxy)
 # -------------------------------
 
 today = datetime.now().strftime('%Y-%m-%d')
@@ -28,11 +31,27 @@ os.makedirs(download_path, exist_ok=True)
 today_folder = os.path.join("reports", today)
 os.makedirs(today_folder, exist_ok=True)
 
+
+def check_connectivity(url="https://meteo.gov.lk/", timeout=30):
+    """Print whether the site is reachable from this machine (diagnostic only)."""
+    start = time.time()
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            print(f"Connectivity check: HTTP {resp.status} in {time.time() - start:.1f}s")
+    except Exception as e:
+        print(f"Connectivity check FAILED after {time.time() - start:.1f}s: {e}")
+
+
+check_connectivity()
+
 # === Chrome Options ===
 chrome_options = Options()
 chrome_options.add_argument("--headless=new")
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
+if PROXY_SERVER:
+    chrome_options.add_argument(f"--proxy-server={PROXY_SERVER}")
 chrome_options.add_experimental_option("prefs", {
     "download.default_directory": download_path,
     "plugins.always_open_pdf_externally": True
@@ -54,6 +73,8 @@ def wait_for_download(folder, timeout=120):
             return pdf_files
         time.sleep(1)
     return []
+
+download_ok = False
 
 try:
     # === Open Website with Retry ===
@@ -116,8 +137,13 @@ try:
             dst = os.path.join(today_folder, f"weather-{today}.pdf")
             shutil.move(file, dst)
         print(f"PDF successfully downloaded and moved to: {dst}")
+        download_ok = True
 
 finally:
     driver.quit()
     print("Chrome closed.")
+
+# Make the workflow show red if nothing was downloaded
+if not download_ok:
+    sys.exit(1)
 
