@@ -44,6 +44,16 @@ jobs:
           curl -6 -sS -m 20 -o /dev/null -w "status=%{http_code}\n" https://meteo.gov.lk/ || echo "IPv6 failed"
           echo "--- Plain HTTP ---"
           curl -sS -m 20 -I http://meteo.gov.lk/ || echo "HTTP failed"
+
+      # TEMPORARY: test whether Browserless can reach meteo.gov.lk
+      - name: Test Browserless
+        continue-on-error: true
+        env:
+          BROWSERLESS_TOKEN: ${{ secrets.BROWSERLESS_TOKEN }}
+        run: |
+          pip install requests
+          python test_browserless.py
+
       # UPDATED: Added Chrome installation here
       - name: Install system dependencies (including Chrome)
         run: |
