@@ -120,3 +120,4 @@ try:
 finally:
     driver.quit()
     print("Chrome closed.")
+
