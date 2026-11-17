@@ -54,6 +54,18 @@ jobs:
           pip install requests
           python test_browserless.py
 
+      # TEMPORARY: test Browserless BQL with Sri Lankan residential proxy
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Test Browserless BQL
+        continue-on-error: true
+        env:
+          BROWSERLESS_TOKEN: ${{ secrets.BROWSERLESS_TOKEN }}
+        run: node meteo_bql_test.js
+
       # UPDATED: Added Chrome installation here
       - name: Install system dependencies (including Chrome)
         run: |
