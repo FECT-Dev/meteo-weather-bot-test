@@ -30,60 +30,28 @@ jobs:
         with:
           python-version: '3.11'   # (earlier edit) was '3.x'
 
-      # TEMPORARY: remove this step once you know why the connection fails
-      - name: Diagnose connection to meteo.gov.lk
-        continue-on-error: true
-        run: |
-          echo "--- DNS ---"
-          getent ahosts meteo.gov.lk || echo "DNS lookup failed"
-          echo "--- Runner public IP ---"
-          curl -s -m 15 https://api.ipify.org; echo
-          echo "--- IPv4 ---"
-          curl -4 -sS -m 20 -o /dev/null -w "dns=%{time_namelookup}s connect=%{time_connect}s tls=%{time_appconnect}s status=%{http_code}\n" https://meteo.gov.lk/ || echo "IPv4 failed"
-          echo "--- IPv6 ---"
-          curl -6 -sS -m 20 -o /dev/null -w "status=%{http_code}\n" https://meteo.gov.lk/ || echo "IPv6 failed"
-          echo "--- Plain HTTP ---"
-          curl -sS -m 20 -I http://meteo.gov.lk/ || echo "HTTP failed"
-
-      # TEMPORARY: test whether Browserless can reach meteo.gov.lk
-      - name: Test Browserless
-        continue-on-error: true
-        env:
-          BROWSERLESS_TOKEN: ${{ secrets.BROWSERLESS_TOKEN }}
-        run: |
-          pip install requests
-          python test_browserless.py
-
-      # TEMPORARY: test Browserless BQL with Sri Lankan residential proxy
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Test Browserless BQL
-        continue-on-error: true
-        env:
-          BROWSERLESS_TOKEN: ${{ secrets.BROWSERLESS_TOKEN }}
-        run: node meteo_bql_test.js
-
-      # UPDATED: Added Chrome installation here
-      - name: Install system dependencies (including Chrome)
+      - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y ghostscript python3-tk tesseract-ocr poppler-utils libtesseract-dev wget unzip
-          wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-          sudo apt install -y ./google-chrome-stable_current_amd64.deb
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install pdfplumber camelot-py[cv] pdf2image pytesseract PyPDF2 selenium chromedriver-autoinstaller pillow
-      - name: Run the PDF download script
-        run: |   # (earlier edit) skip if today's PDF already exists
+      - name: Download the PDF via Browserless
+        env:
+          BROWSERLESS_TOKEN: ${{ secrets.BROWSERLESS_TOKEN }}
+        run: |   # skip if today's PDF already exists
           TODAY=$(date +%Y-%m-%d)
           if [ -f "reports/$TODAY/weather-$TODAY.pdf" ]; then
             echo "Today's PDF already exists. Skipping download."
           else
-            python download_weather_pdf.py
+            node download_weather_pdf_bql.js
           fi
       - name: Move and rename the PDF to reports/YYYY-MM-DD
         run: |
@@ -93,7 +61,7 @@ jobs:
             mv downloads/$TODAY/*.pdf reports/$TODAY/weather-$TODAY.pdf
             echo "Moved PDF to reports/$TODAY/"
           else
-            echo "No PDF downloaded. Skipping move."
+            echo "No PDF in downloads/. Skipping move."
           fi
       - name: Run weather summary extraction
         run: python update_weather_summary.py
