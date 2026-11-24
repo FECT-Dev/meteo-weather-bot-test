@@ -2,8 +2,7 @@ name: Daily Weather PDF Download & Summary
 
 on:
   schedule:
-    - cron: '30 9 * * *'
-    - cron: '30 13 * * *'   # (earlier edit) retry run
+    - cron: '30 7 * * *'   # 1:00 PM Sri Lanka time (07:30 UTC)
   workflow_dispatch:
 
 permissions:
@@ -12,7 +11,7 @@ permissions:
 jobs:
   daily-weather:
     runs-on: ubuntu-latest
-    timeout-minutes: 10   # (earlier edit)
+    timeout-minutes: 10
 
     steps:
       - name: Checkout repository
@@ -25,10 +24,11 @@ jobs:
         run: |
           git config --global user.name "Auto Commit Bot"
           git config --global user.email "actions@github.com"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'   # (earlier edit) was '3.x'
+          python-version: '3.11'
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -39,10 +39,12 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ghostscript python3-tk tesseract-ocr poppler-utils libtesseract-dev wget unzip
+
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install pdfplumber camelot-py[cv] pdf2image pytesseract PyPDF2 selenium chromedriver-autoinstaller pillow
+
       - name: Download the PDF via Browserless
         env:
           BROWSERLESS_TOKEN: ${{ secrets.BROWSERLESS_TOKEN }}
@@ -53,6 +55,7 @@ jobs:
           else
             node download_weather_pdf_bql.js
           fi
+
       - name: Move and rename the PDF to reports/YYYY-MM-DD
         run: |
           TODAY=$(date +%Y-%m-%d)
@@ -63,6 +66,7 @@ jobs:
           else
             echo "No PDF in downloads/. Skipping move."
           fi
+
       - name: Run weather summary extraction
         run: python update_weather_summary.py
 
